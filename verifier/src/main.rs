@@ -3,10 +3,16 @@ Proof:
     merkle roots of P, D, spot check merkle proofs, low-degree proofs of P and D
 */
 
+mod ff;
+
 use std::sync::Arc;
 use rustfft::FFTplanner;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
+
+use polynomial::Polynomial;
+// pub use ::ff;
+use ff::{Fp};
 
 fn main() {
     let mut input:  Vec<Complex<f32>> = vec![Complex::zero(); 1234];
@@ -18,8 +24,13 @@ fn main() {
      
     // The fft instance returned by the planner is stored behind an `Arc`, so it's cheap to clone
     let fft_clone = Arc::clone(&fft);
+
+    let poly = Polynomial::new(vec![1, 2, 3]);
+    assert_eq!("1+2*x+3*x^2", poly.pretty("x"));
 }
 
+
+/*
 const EXTENSION_FACTOR: u32 = 8;
 
 fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &[u32], output: u32, proof: Proof) -> bool {
@@ -37,3 +48,8 @@ fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &[u32], output: 
 
     true
 }
+
+fn main() {
+
+}
+*/

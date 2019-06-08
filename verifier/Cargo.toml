@@ -6,4 +6,10 @@ edition = "2018"
 
 [dependencies]
 rustfft = "3.0.0"
-polynomial = "0.0.1"
+polynomial = { git = "https://github.com/gifnksm/polynomial-rs", rev = "eb85a4e55" }
+# librustzcash = { git = "https://github.com/zcash/librustzcash", rev = "3b6f5e3d5" }
+# ff = { version = "0.4.0", features = ["derive"] }
+# rand = "0.6.5"
+num-complex = "0.2.1"
+# ramp = "0.5.1"
+num-bigint = "0.2.0"
