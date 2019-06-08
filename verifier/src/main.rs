@@ -3,7 +3,8 @@ Proof:
     merkle roots of P, D, spot check merkle proofs, low-degree proofs of P and D
 */
 
-mod ff;
+#[macro_use]
+extern crate lazy_static;
 
 use std::sync::Arc;
 use rustfft::FFTplanner;

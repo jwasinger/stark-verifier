@@ -1,30 +1,33 @@
-extern crate num_bigint;
+//extern crate num_bigint;
+
+#[macro_use]
+extern crate lazy_static;
 
 //use num_traits::{Num};
 use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
 use num_complex::{Complex};
 use num_bigint::BigUint;
-use rustfft::num_traits::Num;
+use rustfft::num_traits::{Num, Pow};
 use rustfft::num_traits::identities::{One, Zero};
 use std::boxed::Box;
+use std::error::Error;
+use std::str::FromStr;
 
 
-const MODULUS: BigUint = BigUint::pow(BigUint::from(2), BigUint::from(256)) - BigUInt::pow(BigUint::from(2), BigUint::from(32)) * BigUint::from(351) + BigUint::from(1);
+lazy_static! {
+    static ref MODULUS: BigUint = {
+        BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639936").unwrap()
+    };
+}
 
 #[derive(Clone)]
 pub struct Fp(BigUint);
-
-impl Fp {
-    fn Foo(bar: Complex<Fp>, baz: Complex<Fp>) {
-        return bar + baz;
-    }
-}
 
 impl Add for Fp {
     type Output = Self;
 
     fn add(mut self, rhs: Self) -> Self {
-        self = (self + rhs); //% MODULUS; 
+        self.0 = (self.0 + rhs.0) % MODULUS; 
         self
     }
 }
@@ -52,6 +55,7 @@ impl Neg for Fp {
 
     fn neg(mut self) -> Self {
         //self = (self + rhs); //% MODULUS; 
+        unimplemented!();
         self
     }
 }
@@ -60,7 +64,8 @@ impl Rem for Fp {
     type Output = Self;
 
     fn rem(mut self, rhs: Self) -> Self {
-        self = (self + rhs); //% MODULUS; 
+        //self = (self + rhs); //% MODULUS; 
+        unimplemented!();
         self
     }
 }
@@ -69,7 +74,7 @@ impl Sub for Fp {
     type Output = Self;
 
     fn sub(mut self, rhs: Self) -> Self {
-        self = (self + rhs); //% MODULUS; 
+        self.0 = (self.0 - rhs.0);// % MODULUS;
         self
     }
 }
@@ -97,9 +102,9 @@ impl One for Fp {
 }
 
 impl Num for Fp {
-	type FromStrRadixErr = Error;
+	type FromStrRadixErr = &'static str;
 
 	fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-		Err(From::from("fuck"))
+		Err("fuck")
 	}
 }
