@@ -1,13 +1,10 @@
 //extern crate num_bigint;
 
-#[macro_use]
-extern crate lazy_static;
-
 //use num_traits::{Num};
 use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
-use num_complex::{Complex};
+//use num_complex::{Complex};
 use num_bigint::BigUint;
-use rustfft::num_traits::{Num, Pow};
+use rustfft::num_traits::{Num};
 use rustfft::num_traits::identities::{One, Zero};
 use std::boxed::Box;
 use std::error::Error;
@@ -16,16 +13,15 @@ use std::str::FromStr;
 //TODO pregenerate modulus bigint
 const MODULUS: &str = "115792089237316195423570985008687907853269984665640564039457584007913129639936";
 
-
 #[derive(Clone)]
 pub struct Fp(BigUint);
 
 impl Fp {
-    fn get_modulus() -> BigUint {
+    pub fn get_modulus() -> BigUint {
         BigUint::from_str(MODULUS).unwrap()
     }
 
-    fn new(b: BigUint) -> Self {
+    pub fn new(b: BigUint) -> Self {
         Fp(b % Self::get_modulus())
     }
 }
