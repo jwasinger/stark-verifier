@@ -8,15 +8,15 @@ pub struct LowDegreeProofElement {
     poly_branches: [u8; 32]
 }
 
-pub struct Proof {
+pub struct LowDegreeProof {
     merkle_root: [u8; 32], // merkle root of the solution space?
     l_merkle_root: [u8; 32], // initial lookup merkle root provided by the verifier?
     elems: Vec<LowDegreeProofElement>,
 }
 
-impl Proof {
+impl LowDegreeProof {
     //probably should have looked at Serde but it looks complicated and IDGAF
-    fn deserialize(data: &Vec<u8>) -> Result<Proof, &'static str> {
+    fn deserialize(data: &Vec<u8>) -> Result<Self, &'static str> {
         let low_degree_proof_size: usize  = data.len() - PREAMBLE_SIZE; // TODO how to make this const/
 
         if data.len() == 0 {
@@ -48,7 +48,7 @@ impl Proof {
         merkle_root.clone_from_slice(&data[0..PREAMBLE_SIZE-32]);
         l_merkle_root.clone_from_slice(&data[(PREAMBLE_SIZE-32)..PREAMBLE_SIZE]);
 
-        let mut low_degree_proof = Proof {
+        let mut low_degree_proof = Self {
             merkle_root: [0u8; 32],
             l_merkle_root: [0u8; 32],
             elems: Vec::new(),
