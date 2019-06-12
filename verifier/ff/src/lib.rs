@@ -24,6 +24,10 @@ impl Fp {
     pub fn new(b: BigUint) -> Self {
         Fp(b % Self::get_modulus())
     }
+
+    pub fn internal_value(&self) -> BigUint {
+        return self.0.clone();
+    }
 }
 
 //TODO are rust operator overloads supposed to mutate the original object? Methinks no
@@ -31,8 +35,8 @@ impl Fp {
 impl Add for Fp {
     type Output = Self;
 
-    fn add(mut self, rhs: Self) -> Self {
-        self.0 = (self.0 + rhs.0) % Self::get_modulus();
+    fn add(self, rhs: Self) -> Self {
+        return Fp::new((self.0 + rhs.0) % Self::get_modulus());
         self
     }
 }
@@ -40,8 +44,9 @@ impl Add for Fp {
 impl Div for Fp {
     type Output = Self;
 
-    fn div(mut self, rhs: Self) -> Self {
-        self.0 = (self.0 + rhs.0) % Self::get_modulus(); 
+    fn div(self, rhs: Self) -> Self {
+        unimplemented!();
+        return Fp::new((self.0 + rhs.0) % Self::get_modulus());
         self
     }
 }
@@ -49,8 +54,8 @@ impl Div for Fp {
 impl Mul for Fp {
     type Output = Self;
 
-    fn mul(mut self, rhs: Self) -> Self {
-        self.0 = (self.0 * rhs.0) % Self::get_modulus(); 
+    fn mul(self, rhs: Self) -> Self {
+        return Fp::new((self.0 * rhs.0) % Self::get_modulus());
         self
     }
 }
@@ -58,7 +63,7 @@ impl Mul for Fp {
 impl Neg for Fp {
     type Output = Self;
 
-    fn neg(mut self) -> Self {
+    fn neg(self) -> Self {
         //self = (self + rhs); //% MODULUS; 
         // TODO
         unimplemented!();
@@ -69,7 +74,7 @@ impl Neg for Fp {
 impl Rem for Fp {
     type Output = Self;
 
-    fn rem(mut self, rhs: Self) -> Self {
+    fn rem(self, rhs: Self) -> Self {
         //self = (self + rhs); //% MODULUS; 
         // TODO
         unimplemented!();
@@ -80,8 +85,8 @@ impl Rem for Fp {
 impl Sub for Fp {
     type Output = Self;
 
-    fn sub(mut self, rhs: Self) -> Self {
-        self.0 = (self.0 - rhs.0) % Self::get_modulus();
+    fn sub(self, rhs: Self) -> Self {
+        return Fp::new((self.0 - rhs.0) % Self::get_modulus());
         self
     }
 }
