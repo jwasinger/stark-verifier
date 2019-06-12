@@ -3,12 +3,17 @@ Proof:
     merkle roots of P, D, spot check merkle proofs, low-degree proofs of P and D
 */
 
+pub mod proof;
+
 use ff::{Fp};
 use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
 
-
 const EXTENSION_FACTOR: u32 = 8;
+
+struct Proof {
+
+}
 
 // https://stackoverflow.com/questions/600293/how-to-check-if-a-number-is-a-power-of-2
 fn is_power_of_2(n: u32) -> bool {
