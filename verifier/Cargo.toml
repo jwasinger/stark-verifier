@@ -16,3 +16,4 @@ num-complex = "0.2.1"
 num-bigint = { git = "https://github.com/jwasinger/num-bigint", branch = "feature/pow"}
 lazy_static = "1.3.0"
 ff = { path = "ff" }
+blake2 = "0.8.0"

@@ -8,11 +8,38 @@ pub mod proof;
 use ff::{Fp};
 use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
+use blake2::{Blake2b, Digest};
+use std::mem::transmute;
 
 const EXTENSION_FACTOR: u32 = 8;
 
 struct Proof {
 
+}
+
+fn get_pseudorandom_indices(seed: u32, count: u32, /*TODO excludeMultiplesOf?*/) -> Vec<u32> {
+    let mut hasher = Blake2b::default();
+    let mut hashes: Vec<u8> = Vec::with_capacity(count / 4 + 1);
+    let mut output: Vec<u32> = Vec::with_capacity(count);
+
+    hasher.input(seed);
+    hashes[0] = hasher.result();
+
+    for i in 0..(count / 4 + 1) {
+        hasher.input(&hashes[i..i+4]);
+        hashes.append(hasher.result());
+    }
+
+    for j in 0..count {
+        let index = [0u8; 8];
+        index.clone_from_slice(&hashes[j..j+4]);
+
+        unsafe {
+            output[j] = mem::transmute::<u32, [u8; 4]>(index);
+        }
+    }
+
+    output 
 }
 
 // https://stackoverflow.com/questions/600293/how-to-check-if-a-number-is-a-power-of-2
@@ -24,10 +51,9 @@ fn is_power_of_2(n: u32) -> bool {
     }
 }
 
-/*
-fn verify_low_degree_proof(merkle_root: &[u8, 32], root_of_unity: &Fp, proof: ..., max_deg_plus_1: &Fp, modulus: &Fp) -> bool {
+fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &Fp, proof: LowDegreeProof, max_deg_plus_1: &Fp, modulus: &Fp) -> bool {
     let mut test_val = root_of_unity.clone(); 
-    let mut rou_deg: f32 = 1
+    let mut rou_deg: f32 = 1;
 
     while test_val != 1 {
         rou_deg *= 2;
@@ -47,9 +73,11 @@ fn verify_low_degree_proof(merkle_root: &[u8, 32], root_of_unity: &Fp, proof: ..
         let root2, column_branches, poly_branches = p;
         let special_x = Fp::new(merkle_root)
 
+        let ys = get_pseudorandom_indices(root2, roudeg / 4, 40, /*TODO excludeMultiplesOF?*/);
+
     }
 }
-*/
+
 fn _fft(v: &Vec<u32>, roots: &Vec<Fp>) -> Vec<Fp> {
   /*
     if v.len() < 4 {
@@ -118,12 +146,9 @@ fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, outpu
     let skips = precision / num_steps;
     let constants_mini_polynomial = fft_inv(round_constants, &Fp::new(G2.pow(EXTENSION_FACTOR*skips)));
     
-    /*
-    //TODO
     if !verify_low_degree_proof(l_root, G2, fri_proof, num_steps * 2, modulus, exclude_multiples_of=extension_factor) {
         return false;
     }
-    */
 
     // TODO perform spot checks
 

@@ -75,3 +75,7 @@ impl LowDegreeProof {
         Ok(low_degree_proof)
     }
 }
+
+impl StarkProof {
+    
+}
