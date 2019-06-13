@@ -14,25 +14,26 @@ use self::proof::{StarkProof, LowDegreeProofElement};
 
 const EXTENSION_FACTOR: u32 = 8;
 
-fn get_pseudorandom_indices(seed: &[u8; 32], count: usize, /*TODO excludeMultiplesOf?*/) -> Vec<u32> {
+fn get_pseudorandom_indices(seed: &[u8; 32], count: usize /*TODO excludeMultiplesOf?*/) -> Vec<u32> {
     let mut hasher = Blake2b::default();
     let mut hashes: Vec<u8> = Vec::with_capacity(count as usize / 4 + 1);
     let mut output: Vec<u32> = Vec::with_capacity(count as usize);
 
     hasher.input(seed);
-    hashes[..32].clone_from_slice(&hasher.result()[0..32]);
+    hashes[..32].clone_from_slice(&hasher.result().clone()[0..32]);
 
     for i in 0..(count / 4 + 1) {
+        hasher = Blake2b::default();
         hasher.input(&hashes[i..i+4]);
-        hashes.extend_from_slice(&hasher.result());
+        hashes.extend_from_slice(&hasher.result().clone());
     }
 
     for j in 0..count {
-        let index = [0u8; 8];
+        let mut index = [0u8; 4];
         index.clone_from_slice(&hashes[j..j+4]);
 
         unsafe {
-            output[j] = transmute::<[u8; 8], u32>(index);
+            output[j] = transmute::<[u8; 4], u32>(index);
         }
     }
 
@@ -48,20 +49,21 @@ fn is_power_of_2(n: u32) -> bool {
     }
 }
 
-fn verify_low_degree_proof(merkle_root: &[u8; 4], root_of_unity: &Fp, proof: Vec<LowDegreeProofElement>, max_deg_plus_1: &Fp, modulus: &Fp) -> bool {
+fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &Fp, proof: Vec<LowDegreeProofElement>, max_deg_plus_1: &Fp, modulus: &BigUint) -> bool {
     let mut test_val = root_of_unity.clone(); 
-    let mut rou_deg = Fp::new(BigUint::from(1u32));
+    //let mut rou_deg = Fp::new(BigUint::from(1u32));
+    let mut rou_deg: usize = 1;
 
     while test_val != Fp::new(BigUint::from(1u32)) {
-        rou_deg = rou_deg * Fp::new(BigUint::from(2u32));
-        test_val = test_val * test_val;
+        rou_deg = rou_deg * 2;
+        test_val.set_internal_value(test_val.internal_value().modpow(&test_val.internal_value(), &modulus).clone());
     }
 
     let quartic_roots_of_unity = [
         Fp::new(BigUint::from(1u32)),
-        pow(root_of_unity.clone(), rou_deg.internal_value() / 4),
-        pow(root_of_unity.clone(), rou_deg.internal_value() / 2),
-        pow(root_of_unity.clone(), rou_deg.internal_value() * 3 / 4)
+        pow(root_of_unity.clone(), rou_deg / 4),
+        pow(root_of_unity.clone(), rou_deg / 2),
+        pow(root_of_unity.clone(), rou_deg * 3 / 4)
     ];
 
     // TODO do I need floor() above?
@@ -72,8 +74,10 @@ fn verify_low_degree_proof(merkle_root: &[u8; 4], root_of_unity: &Fp, proof: Vec
             Fp::new(BigUint::from_bytes_be(merkle_root));
         };
 
-        let ys = get_pseudorandom_indices(element.root2, rou_deg / 4/*TODO excludeMultiplesOF?*/);
+        let ys = get_pseudorandom_indices(&element.root2, rou_deg / 4/*TODO excludeMultiplesOF?*/);
     }
+
+    true
 }
 
 fn _fft(v: &Vec<u32>, roots: &Vec<Fp>) -> Vec<Fp> {
@@ -140,11 +144,11 @@ fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, outpu
     }
 
     let precision = num_steps * EXTENSION_FACTOR;
-    let G2: BigUint = BigUint::from(7u32).pow((modulus - BigUint::from(1u32)) / precision); // TODO do I need floor() here for some reason?
+    let G2: BigUint = BigUint::from(7u32).modpow(&((modulus.clone() - BigUint::from(1u32)) / precision), &modulus); // TODO do I need floor() here for some reason?
     let skips = precision / num_steps;
-    let constants_mini_polynomial = fft_inv(round_constants, &Fp::new(G2.pow(EXTENSION_FACTOR*skips)));
+    let constants_mini_polynomial = fft_inv(round_constants, &Fp::new(G2.modpow(&BigUint::from(EXTENSION_FACTOR*skips), &modulus)));
     
-    if !verify_low_degree_proof(proof.l_root, G2, proof.fri_proof, num_steps * 2, modulus, /*exclude_multiples_of=extension_factor*/) {
+    if !verify_low_degree_proof(&proof.l_merkle_root, &Fp::new(G2.clone()), proof.fri_proof, &Fp::new(BigUint::from(num_steps * 2)), &modulus /*exclude_multiples_of=extension_factor*/) {
         return false;
     }
 

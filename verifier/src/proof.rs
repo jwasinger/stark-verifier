@@ -1,10 +1,13 @@
+use std::mem::{size_of};
+
+const PREAMBLE_SIZE: usize = 64;
 
 pub struct StarkProof {
     pub merkle_root: [u8; 32],
     pub l_merkle_root: [u8; 32],
+    pub fri_proof: Vec<LowDegreeProofElement>,
     pub merkle_branches: Vec<u8>, // TODO
     pub linear_comb_branches: Vec<u8>, // TODO
-    pub fri_proof: Vec<LowDegreeProofElement>
 }
 
 pub struct LowDegreeProofElement {
@@ -14,7 +17,10 @@ pub struct LowDegreeProofElement {
 }
 
 impl StarkProof {
-    //probably should have looked at Serde but it looks complicated and IDGAF
+    /*
+    Data Format
+
+    */
     fn deserialize(data: &Vec<u8>) -> Result<Self, &'static str> {
         let low_degree_proof_size: usize  = data.len() - PREAMBLE_SIZE; // TODO how to make this const/
 
@@ -22,11 +28,11 @@ impl StarkProof {
             return Err(From::from("preamble section was bad"));
         }
 
-        if data.len() % mem::size_of::<LowDegreeProofElement>() != 0 {
+        if data.len() % size_of::<LowDegreeProofElement>() != 0 {
             return Err(From::from("low degree proof elements incorrect size"));
         }
 
-        let num_low_degree_proof_elems = low_degree_proof_size % mem::size_of::<LowDegreeProofElement>();
+        let num_low_degree_proof_elems = low_degree_proof_size % size_of::<LowDegreeProofElement>();
 
         //let merkle_root = data[0..PREAMBLE_SIZE-32];
         //let l_merkle_root = data[(PREAMBLE_SIZE-32)..PREAMBLE_SIZE];
@@ -57,14 +63,16 @@ impl StarkProof {
 
         let ldp_offset = PREAMBLE_SIZE;
 
-        for ldp_offset in (PREAMBLE_SIZE..data.len()).step_by(mem::size_of::<LowDegreeProofElement>()) {
+        /*
+        TODO
+        for ldp_offset in (PREAMBLE_SIZE..data.len()).step_by(size_of::<LowDegreeProofElement>()) {
         //for (ldp_offset < data.len() - mem::size_of(LowDegreeProofElement); ldp_offset += mem::size_of(LowDegreeProofElement)) {
-            let mut root2 = [0u8; 96];
+            let mut root2 = [0u8; 32];
             let mut column_branches = [0u8; 96];
             let mut poly_branches = [0u8; 32];
             root2.clone_from_slice(&data[ldp_offset..96]);
-            column_branches.clone_from_slice(&data[ldp_offset+96..ldp_offset+96+96]);
-            poly_branches.clone_from_slice(&data[ldp_offset+96+96..ldp_offset+96+96+32]);
+            //column_branches.clone_from_slice(&data[ldp_offset+96..ldp_offset+96+96]);
+            //poly_branches.clone_from_slice(&data[ldp_offset+96+96..ldp_offset+96+96+32]);
 
             low_degree_proof.fri_proof.push(LowDegreeProofElement{
                 root2,
@@ -72,6 +80,9 @@ impl StarkProof {
                 poly_branches
             });
         }
+        */
+
+        low_degree_proof.fri_proof = Vec::new();
 
         Ok(low_degree_proof)
     }

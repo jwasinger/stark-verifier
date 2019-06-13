@@ -28,6 +28,10 @@ impl Fp {
     pub fn internal_value(&self) -> BigUint {
         return self.0.clone();
     }
+
+    pub fn set_internal_value(&mut self,  val: BigUint) {
+        self.0 = val;
+    }
 }
 
 //TODO are rust operator overloads supposed to mutate the original object? Methinks no
