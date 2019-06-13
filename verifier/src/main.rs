@@ -7,27 +7,24 @@ pub mod proof;
 
 use ff::{Fp};
 use num_bigint::BigUint;
-use rustfft::num_traits::Pow;
+use rustfft::num_traits::pow;
 use blake2::{Blake2b, Digest};
 use std::mem::transmute;
+use self::proof::{StarkProof, LowDegreeProofElement};
 
 const EXTENSION_FACTOR: u32 = 8;
 
-struct Proof {
-
-}
-
-fn get_pseudorandom_indices(seed: u32, count: u32, /*TODO excludeMultiplesOf?*/) -> Vec<u32> {
+fn get_pseudorandom_indices(seed: &[u8; 32], count: usize, /*TODO excludeMultiplesOf?*/) -> Vec<u32> {
     let mut hasher = Blake2b::default();
-    let mut hashes: Vec<u8> = Vec::with_capacity(count / 4 + 1);
-    let mut output: Vec<u32> = Vec::with_capacity(count);
+    let mut hashes: Vec<u8> = Vec::with_capacity(count as usize / 4 + 1);
+    let mut output: Vec<u32> = Vec::with_capacity(count as usize);
 
     hasher.input(seed);
-    hashes[0] = hasher.result();
+    hashes[..32].clone_from_slice(&hasher.result()[0..32]);
 
     for i in 0..(count / 4 + 1) {
         hasher.input(&hashes[i..i+4]);
-        hashes.append(hasher.result());
+        hashes.extend_from_slice(&hasher.result());
     }
 
     for j in 0..count {
@@ -35,7 +32,7 @@ fn get_pseudorandom_indices(seed: u32, count: u32, /*TODO excludeMultiplesOf?*/)
         index.clone_from_slice(&hashes[j..j+4]);
 
         unsafe {
-            output[j] = mem::transmute::<u32, [u8; 4]>(index);
+            output[j] = transmute::<[u8; 8], u32>(index);
         }
     }
 
@@ -51,30 +48,31 @@ fn is_power_of_2(n: u32) -> bool {
     }
 }
 
-fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &Fp, proof: LowDegreeProof, max_deg_plus_1: &Fp, modulus: &Fp) -> bool {
+fn verify_low_degree_proof(merkle_root: &[u8; 4], root_of_unity: &Fp, proof: Vec<LowDegreeProofElement>, max_deg_plus_1: &Fp, modulus: &Fp) -> bool {
     let mut test_val = root_of_unity.clone(); 
-    let mut rou_deg: f32 = 1;
+    let mut rou_deg = Fp::new(BigUint::from(1u32));
 
-    while test_val != 1 {
-        rou_deg *= 2;
+    while test_val != Fp::new(BigUint::from(1u32)) {
+        rou_deg = rou_deg * Fp::new(BigUint::from(2u32));
         test_val = test_val * test_val;
     }
 
     let quartic_roots_of_unity = [
-        Fp::new(1),
-        root_of_unity.pow((roudeg / 4)),
-        root_of_unity.pow((roudeg / 2)),
-        root_of_unity.pow((roudeg * 3 / 4))
+        Fp::new(BigUint::from(1u32)),
+        pow(root_of_unity.clone(), rou_deg.internal_value() / 4),
+        pow(root_of_unity.clone(), rou_deg.internal_value() / 2),
+        pow(root_of_unity.clone(), rou_deg.internal_value() * 3 / 4)
     ];
 
     // TODO do I need floor() above?
 
-    for p in proof.proof {
-        let root2, column_branches, poly_branches = p;
-        let special_x = Fp::new(merkle_root)
+    for element in proof {
+        //let (root2, column_branches, poly_branches) = p;
+        let special_x = unsafe { 
+            Fp::new(BigUint::from_bytes_be(merkle_root));
+        };
 
-        let ys = get_pseudorandom_indices(root2, roudeg / 4, 40, /*TODO excludeMultiplesOF?*/);
-
+        let ys = get_pseudorandom_indices(element.root2, rou_deg / 4/*TODO excludeMultiplesOF?*/);
     }
 }
 
@@ -126,7 +124,7 @@ fn fft_inv(v: &Vec<u32>, root_of_unity: &Fp) -> Vec<Fp> {
     //}
 }
 
-fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, output: u32/*, proof: Proof*/) -> bool {
+fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, output: u32, proof: StarkProof) -> bool {
     let modulus: BigUint = Fp::get_modulus();
 
     if num_steps > (2u32.pow(32u32) / EXTENSION_FACTOR) { //TODO use of floor here?
@@ -146,7 +144,7 @@ fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, outpu
     let skips = precision / num_steps;
     let constants_mini_polynomial = fft_inv(round_constants, &Fp::new(G2.pow(EXTENSION_FACTOR*skips)));
     
-    if !verify_low_degree_proof(l_root, G2, fri_proof, num_steps * 2, modulus, exclude_multiples_of=extension_factor) {
+    if !verify_low_degree_proof(proof.l_root, G2, proof.fri_proof, num_steps * 2, modulus, /*exclude_multiples_of=extension_factor*/) {
         return false;
     }
 

@@ -1,20 +1,19 @@
-use std::mem;
 
-const PREAMBLE_SIZE: usize = 64;
+pub struct StarkProof {
+    pub merkle_root: [u8; 32],
+    pub l_merkle_root: [u8; 32],
+    pub merkle_branches: Vec<u8>, // TODO
+    pub linear_comb_branches: Vec<u8>, // TODO
+    pub fri_proof: Vec<LowDegreeProofElement>
+}
 
 pub struct LowDegreeProofElement {
-    root2: [u8; 96],
-    column_branches: [u8; 96],
-    poly_branches: [u8; 32]
+    pub root2: [u8; 32],
+    pub column_branches: Vec<u8>, // TODO
+    pub poly_branches: Vec<u8>  // TODO
 }
 
-pub struct LowDegreeProof {
-    merkle_root: [u8; 32], // merkle root of the solution space?
-    l_merkle_root: [u8; 32], // initial lookup merkle root provided by the verifier?
-    elems: Vec<LowDegreeProofElement>,
-}
-
-impl LowDegreeProof {
+impl StarkProof {
     //probably should have looked at Serde but it looks complicated and IDGAF
     fn deserialize(data: &Vec<u8>) -> Result<Self, &'static str> {
         let low_degree_proof_size: usize  = data.len() - PREAMBLE_SIZE; // TODO how to make this const/
@@ -49,9 +48,11 @@ impl LowDegreeProof {
         l_merkle_root.clone_from_slice(&data[(PREAMBLE_SIZE-32)..PREAMBLE_SIZE]);
 
         let mut low_degree_proof = Self {
-            merkle_root: [0u8; 32],
-            l_merkle_root: [0u8; 32],
-            elems: Vec::new(),
+            merkle_root, 
+            l_merkle_root,
+            merkle_branches: Vec::new(), //TODO ignoring merkle_branches and linear_comb_branches for now
+            linear_comb_branches: Vec::new(),
+            fri_proof: Vec::new(),
         };
 
         let ldp_offset = PREAMBLE_SIZE;
@@ -65,7 +66,7 @@ impl LowDegreeProof {
             column_branches.clone_from_slice(&data[ldp_offset+96..ldp_offset+96+96]);
             poly_branches.clone_from_slice(&data[ldp_offset+96+96..ldp_offset+96+96+32]);
 
-            low_degree_proof.elems.push(LowDegreeProofElement{
+            low_degree_proof.fri_proof.push(LowDegreeProofElement{
                 root2,
                 column_branches,
                 poly_branches
@@ -74,8 +75,4 @@ impl LowDegreeProof {
 
         Ok(low_degree_proof)
     }
-}
-
-impl StarkProof {
-    
 }
