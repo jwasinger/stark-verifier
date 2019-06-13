@@ -21,7 +21,7 @@ impl StarkProof {
     Data Format
 
     */
-    fn deserialize(data: &Vec<u8>) -> Result<Self, &'static str> {
+    pub fn deserialize(data: &Vec<u8>) -> Result<Self, &'static str> {
         let low_degree_proof_size: usize  = data.len() - PREAMBLE_SIZE; // TODO how to make this const/
 
         if data.len() == 0 {

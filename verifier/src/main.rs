@@ -14,6 +14,15 @@ use self::proof::{StarkProof, LowDegreeProofElement};
 
 const EXTENSION_FACTOR: u32 = 8;
 
+fn mimc(input: &BigUint, steps: usize, round_constants: &Vec<BigUint>) -> u32 {
+	let modulus = Fp::get_modulus();
+    let mut output = input.clone();
+
+	for i in 0..(steps.len()-1) {
+      output = output.pow(3) + round_constants[i % round_constants.len()] % modulus;
+	}
+}
+
 fn get_pseudorandom_indices(seed: &[u8; 32], count: usize /*TODO excludeMultiplesOf?*/) -> Vec<u32> {
     let mut hasher = Blake2b::default();
     let mut hashes: Vec<u8> = Vec::with_capacity(count as usize / 4 + 1);
@@ -128,7 +137,7 @@ fn fft_inv(v: &Vec<u32>, root_of_unity: &Fp) -> Vec<Fp> {
     //}
 }
 
-fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, output: u32, proof: StarkProof) -> bool {
+fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUint>, output: BigUint, proof: StarkProof) -> bool {
     let modulus: BigUint = Fp::get_modulus();
 
     if num_steps > (2u32.pow(32u32) / EXTENSION_FACTOR) { //TODO use of floor here?
@@ -148,9 +157,11 @@ fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, outpu
     let skips = precision / num_steps;
     let constants_mini_polynomial = fft_inv(round_constants, &Fp::new(G2.modpow(&BigUint::from(EXTENSION_FACTOR*skips), &modulus)));
     
+    /*
     if !verify_low_degree_proof(&proof.l_merkle_root, &Fp::new(G2.clone()), proof.fri_proof, &Fp::new(BigUint::from(num_steps * 2)), &modulus /*exclude_multiples_of=extension_factor*/) {
         return false;
     }
+    */
 
     // TODO perform spot checks
 
@@ -158,5 +169,14 @@ fn verify_mimc_proof(inp: u32, num_steps: u32, round_constants: &Vec<u32>, outpu
 }
 
 fn main() {
+    let serialized_proof = hex::decode("53a0e380573d3bada3a837e48d93aafa7ef8598cad5164919bbf890f445f04ecf0aeca09558102275bbf9cc82f49d71b37ae96fef1aa3141ae805deb0e80fd14").unwrap();
+    let proof = StarkProof::deserialize(&serialized_proof); 
+    const LOG_STEPS: usize = 13;
+    const constants = (..64).iter().map(|i| i.pow(7).pow(42);
 
+    if !verify_mimc_proof(BigUint::from(3u8), BigUint::from(2u8).pow(LOG_STEPS), constants, mimc(BigUint::from(3u8, BigUint::from(2u8).pow(LOG_STEPS), constants), proof) {
+        panic!("could not verify mimc stark proof");
+    }
+
+    println!("done");
 }
