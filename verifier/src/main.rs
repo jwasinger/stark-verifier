@@ -163,7 +163,7 @@ fn _fft(v: &Vec<BigUint>, roots: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUin
     for (i, (x, y)) in left.iter().zip(right).enumerate() {
         let y_times_root: BigUint = y * &roots[i];
         output[i] = x+&y_times_root.clone() % modulus;
-        println!("x {}, y {}, z {}, a {}", x, x-&y_times_root, (x-&y_times_root) % modulus);
+        //println!("x {}, y {}, z {}, a {}", x, x-&y_times_root, (x-&y_times_root) % modulus);
         output[i+left.len()] = (x-&y_times_root) % modulus;
     }
 
