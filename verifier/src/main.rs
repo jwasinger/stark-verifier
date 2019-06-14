@@ -96,13 +96,29 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &Fp, proof: Ve
     true
 }
 
-fn _fft(v: &Vec<BigUint>, roots: &Vec<Fp>) -> Vec<Fp> {
-  /*
-    if v.len() < 4 {
-        return simple_fft(v, roots)
+fn simple_ft(vals: &Vec<BigUint>, roots_of_unity: &Vec<BigUint>) -> Vec<Fp> {
+    if vals.len() > 3 {
+        panic!("called ft with more than three arguments");
     }
-TODO
-    */
+
+    let mut output: Vec<Fp> = Vec::new();
+
+    for i in 0..roots_of_unity.len() {
+        let mut last = BigUint::from(0u8);
+        for j in 0..roots_of_unity.len() {
+            last += vals[i] * roots_of_unity[(i*j) % roots_of_unity.len()];
+        }
+
+        output.push(Fp::new(last));
+    }
+
+    output
+}
+
+fn _fft(v: &Vec<BigUint>, roots: &Vec<Fp>) -> Vec<Fp> {
+    if v.len() < 4 {
+        return simple_ft(v, roots);
+    }
 
     let left_vals: Vec<BigUint> = v.iter().enumerate().filter(|&(i, _)| (i+1) % 2 == 0).map(|(_, e)| e.clone()).collect();
     let right_vals: Vec<BigUint>  = v.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
@@ -158,7 +174,8 @@ fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUi
         return false;
     }
 
-    if (round_constants.len() as u32) < num_steps as u32 {
+    println!("fuckfuck {} {}", round_constants.len(), num_steps);
+    if (round_constants.len() as u32) > num_steps as u32 {
         return false;
     }
 
