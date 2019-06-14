@@ -28,9 +28,15 @@ impl StarkProof {
             return Err(From::from("preamble section was bad"));
         }
 
+        if data.len() != 64 {
+            return Err(From::from("data length should only be 64 elements"));
+        }
+
+        /*
         if data.len() % size_of::<LowDegreeProofElement>() != 0 {
             return Err(From::from("low degree proof elements incorrect size"));
         }
+        */
 
         let num_low_degree_proof_elems = low_degree_proof_size % size_of::<LowDegreeProofElement>();
 
