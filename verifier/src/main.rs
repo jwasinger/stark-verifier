@@ -5,18 +5,18 @@ Proof:
 
 pub mod proof;
 
-use ff::{Fp};
 use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
+use std::str::FromStr;
 
 use blake2::{Blake2b, Digest};
 use std::mem::transmute;
 use self::proof::{StarkProof, LowDegreeProofElement};
 
 const EXTENSION_FACTOR: usize = 8;
+const MODULUS: &str = "115792089237316195423570985008687907853269984665640564039457584006405596119041";
 
-fn mimc(input: &BigUint, steps: usize, round_constants: &Vec<BigUint>) -> BigUint {
-	let modulus = Fp::get_modulus();
+fn mimc(input: &BigUint, steps: usize, round_constants: &Vec<BigUint>, modulus: &BigUint) -> BigUint {
     let mut output = input.clone();
 
 	for i in 0..(steps-1) {
@@ -65,30 +65,28 @@ fn is_power_of_2(n: u32) -> bool {
     }
 }
 
-fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &Fp, proof: Vec<LowDegreeProofElement>, max_deg_plus_1: &Fp, modulus: &BigUint) -> bool {
+fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proof: Vec<LowDegreeProofElement>, max_deg_plus_1: &BigUint, modulus: &BigUint) -> bool {
     let mut test_val = root_of_unity.clone(); 
     //let mut rou_deg = Fp::new(BigUint::from(1u32));
     let mut rou_deg: usize = 1;
 
-    while test_val != Fp::new(BigUint::from(1u32)) {
+    while test_val != BigUint::from(1u32) {
         rou_deg = rou_deg * 2;
-        test_val.set_internal_value(test_val.internal_value().modpow(&test_val.internal_value(), &modulus).clone());
+        test_val = test_val.modpow(&test_val, &modulus).clone();
     }
 
     let quartic_roots_of_unity = [
         BigUint::from(1u32),
-        root_of_unity.internal_value().pow(rou_deg / 4),
-        root_of_unity.internal_value().pow(rou_deg / 2),
-        root_of_unity.internal_value().pow(rou_deg * 3 / 4)
+        root_of_unity.pow(rou_deg / 4),
+        root_of_unity.pow(rou_deg / 2),
+        root_of_unity.pow(rou_deg * 3 / 4)
     ];
 
     // TODO do I need floor() above?
 
     for element in proof {
         //let (root2, column_branches, poly_branches) = p;
-        let special_x = unsafe { 
-            Fp::new(BigUint::from_bytes_be(merkle_root));
-        };
+        let special_x = BigUint::from_bytes_be(merkle_root);
 
         let ys = get_pseudorandom_indices(&element.root2, rou_deg / 4/*TODO excludeMultiplesOF?*/);
     }
@@ -96,85 +94,119 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &Fp, proof: Ve
     true
 }
 
-fn simple_ft(vals: &Vec<BigUint>, roots_of_unity: &Vec<Fp>) -> Vec<Fp> {
-    if vals.len() > 3 {
-        panic!("called ft with more than three arguments");
+fn simple_ft(vals: &Vec<BigUint>, roots_of_unity: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUint> {
+    if vals.len() > 4 {
+        panic!("called ft with more than four arguments");
     }
 
-    let mut output: Vec<Fp> = Vec::new();
+    let mut output: Vec<BigUint> = Vec::new();
+
+    /*
+    println!("simple ft vals");
+    for val in vals {
+        println!("{}", &val);
+    }
+
+    println!("simple ft roots");
+    for root in roots_of_unity {
+        println!("{}", &root);
+    }
+    */
 
     for i in 0..roots_of_unity.len() {
         let mut last = BigUint::from(0u8);
         for j in 0..roots_of_unity.len() {
-            last += vals[i].clone() * &roots_of_unity[(i*j) % roots_of_unity.len()].internal_value();
+            last += vals[j].clone() * &roots_of_unity[(i*j) % roots_of_unity.len()];
         }
 
-        output.push(Fp::new(last));
+        output.push(last % modulus);
     }
 
     output
 }
 
-fn _fft(v: &Vec<BigUint>, roots: &Vec<Fp>) -> Vec<Fp> {
-    if v.len() < 4 {
-        return simple_ft(v, roots);
+fn _fft(v: &Vec<BigUint>, roots: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUint> {
+    if v.len() <= 4 {
+        return simple_ft(v, roots, &modulus);
     }
 
-    let left_vals: Vec<BigUint> = v.iter().enumerate().filter(|&(i, _)| (i+1) % 2 == 0).map(|(_, e)| e.clone()).collect();
-    let right_vals: Vec<BigUint>  = v.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
-    let new_roots: Vec<Fp> = roots.iter().enumerate().filter(|&(i, _)| (i+1) % 2 == 0).map(|(_, e)| e.clone()).collect();
+    println!("val:");
+    for val in v {
+        println!("{}", &val);
+    }
 
+    println!("roots:");
+    for root in roots {
+        println!("{}", &root);
+    }
 
-    let left = _fft(&left_vals, &new_roots);
-    let right = _fft(&right_vals, &new_roots); 
-    let mut output: Vec<Fp> = vec![Fp::new(BigUint::from(0u32)); v.len()];
+    let right_vals: Vec<BigUint> = v.iter().enumerate().filter(|&(i, _)| i % 2 != 0).map(|(_, e)| e.clone()).collect();
+    let left_vals: Vec<BigUint>  = v.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
+    let new_roots: Vec<BigUint> = roots.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
+
+    let left = _fft(&left_vals, &new_roots, &modulus);
+    let right = _fft(&right_vals, &new_roots, &modulus); 
+
+    println!("left vals: ");
+    for val in &left {
+        println!("{}", &val);
+    }
+
+    println!("right vals: ");
+    for val in &right {
+        println!("{}", &val);
+    }
+
+    let mut output: Vec<BigUint> = vec![BigUint::from(0u32); v.len()];
 
     // TODO why does y not need to be dereferenced here?
     for (i, (x, y)) in left.iter().zip(right).enumerate() {
-        let y_times_root: BigUint = y.internal_value() * roots[i].internal_value();
-        output[i] = Fp::new(x.internal_value()+y_times_root.clone());
-        output[i+left.len()] = Fp::new(x.internal_value()-y_times_root);
+        let y_times_root: BigUint = y * &roots[i];
+        output[i] = x+&y_times_root.clone() % modulus;
+        println!("x {}, y {}, z {}, a {}", x, x-&y_times_root, (x-&y_times_root) % modulus);
+        output[i+left.len()] = (x-&y_times_root) % modulus;
     }
 
     output
 }
 
 // inverse fast fourier transform
-fn fft_inv(v: &Vec<BigUint>, root_of_unity: &Fp) -> Vec<Fp> {
-    println!("root of unity is {}", &root_of_unity.internal_value());
-    let mut roots_of_unity: Vec<Fp>  = vec![Fp::new(1u32.into()), root_of_unity.clone()];
+fn fft_inv(v: &Vec<BigUint>, root_of_unity: &BigUint, modulus: &BigUint) -> Vec<BigUint> {
+    let mut roots_of_unity: Vec<BigUint>  = vec![BigUint::from(1u32), root_of_unity.clone()];
     let mut vals = v.clone();
+
     //let const modulus = Fp::get_modulus();
 
-    println!("root of unity is {}", &root_of_unity.internal_value());
-    let one = Fp::new(BigUint::from(1u32));
+   // println!("root of unity is {}", &root_of_unity);
+    let one = BigUint::from(1u32);
     while roots_of_unity[roots_of_unity.len()-1] != one {
-        println!("1 {}", &roots_of_unity[roots_of_unity.len()-1].internal_value());
-        println!("2 {}", &(roots_of_unity[roots_of_unity.len()-1].clone() * root_of_unity.clone()).internal_value()); 
-        let new_root = roots_of_unity[roots_of_unity.len()-1].clone() * root_of_unity.clone();
-        //println!("{}", &new_root.internal_value());
+        let new_root = (roots_of_unity[roots_of_unity.len()-1].clone() * root_of_unity.clone()) % modulus;
         roots_of_unity.push(new_root);
     }
 
     if roots_of_unity.len() > vals.len() {
         // TODO optimize this so that no array copying is done
-        roots_of_unity.append(&mut vec![Fp::new(BigUint::from(0u32)); roots_of_unity.len() - vals.len() - 1]);
+        roots_of_unity.append(&mut vec![BigUint::from(0u32); roots_of_unity.len() - vals.len() - 1]);
     }
 
+    roots_of_unity.reverse();
+    roots_of_unity.remove(roots_of_unity.len()-1);
+
+    let invlen = BigUint::from(vals.len()).modpow(&modulus, &(modulus-BigUint::from(1u8)));
+
+    /*
+    println!("roots of unity: ");
     for root in &roots_of_unity {
-        println!("{}", &root.internal_value());
-        println!("foo");
+        println!("{}", root);
     }
+    */
 
-    //let inv = true;
+    let result: Vec<BigUint> = _fft(v, &roots_of_unity, modulus).iter().map(|x| (x.clone() * &invlen) % modulus).collect();
 
-    //if inv {
-    _fft(v, &roots_of_unity)
-    //}
+    result
 }
 
-fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUint>, output: BigUint, proof: StarkProof) -> bool {
-    let modulus: BigUint = Fp::get_modulus();
+fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUint>, output: BigUint, proof: StarkProof, modulus: &BigUint) -> bool {
 
     if num_steps > (2usize.pow(32) / EXTENSION_FACTOR) { //TODO use of floor here?
         return false;
@@ -193,13 +225,13 @@ fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUi
     let skips = precision / num_steps;
     let skips2 = num_steps / round_constants.len();
 
-    let val = Fp::new(G2.modpow(&BigUint::from(EXTENSION_FACTOR*skips2), &modulus));
+    let val = G2.modpow(&BigUint::from(EXTENSION_FACTOR*skips2), &modulus);
 
     println!("skips is {}", skips);
     println!("extension factor is {}", EXTENSION_FACTOR);
     println!("num_steps is {}", num_steps);
     println!("G2 is {}", G2);
-    println!("constants mini polynomial root is {}",  &val.internal_value());
+    println!("constants mini polynomial root is {}",  &val);
 
     //println!("m-p {}", &((modulus.clone() - BigUint::from(1u32)) / precision));
 
@@ -219,7 +251,7 @@ fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUi
     //println!("val {}", &val.internal_value());
     //println!("modulus {}", &modulus);
 
-    let constants_mini_polynomial = fft_inv(round_constants, &val);
+    let constants_mini_polynomial = fft_inv(round_constants, &val, &modulus);
     
     /*
     if !verify_low_degree_proof(&proof.l_merkle_root, &Fp::new(G2.clone()), proof.fri_proof, &Fp::new(BigUint::from(num_steps * 2)), &modulus /*exclude_multiples_of=extension_factor*/) {
@@ -237,13 +269,14 @@ fn main() {
     let proof = StarkProof::deserialize(&serialized_proof).expect("couldn't deserialize"); 
     const LOG_STEPS: usize = 13;
     let mut constants: Vec<BigUint> = Vec::new();
+    let modulus: BigUint = BigUint::from_str(MODULUS).expect("modulus couldn't be deserialized into bigint");
 
     for i in 0..64 {
         let constant = BigUint::from(i as u8).pow(BigUint::from(7u8)) ^ BigUint::from(42u8);
         constants.push(constant);
     }
 
-    if !verify_mimc_proof(BigUint::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants, mimc(&BigUint::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants), proof) {
+    if !verify_mimc_proof(BigUint::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants, mimc(&BigUint::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants, &modulus), proof, &modulus) {
         panic!("could not verify mimc stark proof");
     }
 
