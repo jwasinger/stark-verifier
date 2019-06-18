@@ -77,27 +77,19 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proo
         rou_deg = rou_deg * 2;
         test_val = test_val.modpow(&BigUint::from(2u8), &modulus).clone();
     }
-
-    
-    let mut quartic_roots_of_unity: [BigUint; 4] = Default::default();
     
     let mut arg: usize = 0; 
 
-    quartic_roots_of_unity[0] = BigUint::from(1u32);
-
-    quartic_roots_of_unity[1] = root_of_unity.modpow(&BigUint::from(rou_deg / 4), &modulus);
-
-    quartic_roots_of_unity[2] = root_of_unity.modpow(&BigUint::from(rou_deg / 2), &modulus);
-
-    quartic_roots_of_unity[3] = root_of_unity.modpow(&BigUint::from(rou_deg * 3 / 4), &modulus);
+    let mut quartic_roots_of_unity: [BigUint; 4] = [
+        BigUint::from(1u32),
+        root_of_unity.modpow(&BigUint::from(rou_deg / 4), &modulus),
+        root_of_unity.modpow(&BigUint::from(rou_deg / 2), &modulus),
+        root_of_unity.modpow(&BigUint::from(rou_deg * 3 / 4), &modulus)
+    ];
 
     assert!(&rou_deg == &65536usize, "invalid roudeg");
-
     assert!(&quartic_roots_of_unity[3] == &FromStr::from_str("80127877722526290441229381276271393407378829608771736609433200039324583025757").unwrap(), "bad quartic roots of unity..");
 
-    // TODO do I need floor() above?
-
-    /*
     for element in proof {
         //let (root2, column_branches, poly_branches) = p;
         let special_x = BigUint::from_bytes_be(merkle_root);
@@ -109,7 +101,6 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proo
             println!("{}", &y);
         }
     }
-    */
 
     true
 }
