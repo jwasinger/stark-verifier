@@ -9,6 +9,9 @@ use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
 use std::str::FromStr;
 
+use std::io;
+use std::io::prelude::*;
+
 use blake2::{Blake2b, Digest};
 use std::mem::transmute;
 use self::proof::{StarkProof, LowDegreeProofElement};
@@ -66,30 +69,47 @@ fn is_power_of_2(n: u32) -> bool {
 }
 
 fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proof: Vec<LowDegreeProofElement>, max_deg_plus_1: &BigUint, modulus: &BigUint) -> bool {
+    println!("verifying low degree proof");
     let mut test_val = root_of_unity.clone(); 
-    //let mut rou_deg = Fp::new(BigUint::from(1u32));
     let mut rou_deg: usize = 1;
 
     while test_val != BigUint::from(1u32) {
         rou_deg = rou_deg * 2;
-        test_val = test_val.modpow(&test_val, &modulus).clone();
+        test_val = test_val.modpow(&BigUint::from(2u8), &modulus).clone();
     }
 
-    let quartic_roots_of_unity = [
-        BigUint::from(1u32),
-        root_of_unity.pow(rou_deg / 4),
-        root_of_unity.pow(rou_deg / 2),
-        root_of_unity.pow(rou_deg * 3 / 4)
-    ];
+    
+    let mut quartic_roots_of_unity: [BigUint; 4] = Default::default();
+    
+    let mut arg: usize = 0; 
+
+    quartic_roots_of_unity[0] = BigUint::from(1u32);
+
+    quartic_roots_of_unity[1] = root_of_unity.modpow(&BigUint::from(rou_deg / 4), &modulus);
+
+    quartic_roots_of_unity[2] = root_of_unity.modpow(&BigUint::from(rou_deg / 2), &modulus);
+
+    quartic_roots_of_unity[3] = root_of_unity.modpow(&BigUint::from(rou_deg * 3 / 4), &modulus);
+
+    assert!(&rou_deg == &65536usize, "invalid roudeg");
+
+    assert!(&quartic_roots_of_unity[3] == &FromStr::from_str("80127877722526290441229381276271393407378829608771736609433200039324583025757").unwrap(), "bad quartic roots of unity..");
 
     // TODO do I need floor() above?
 
+    /*
     for element in proof {
         //let (root2, column_branches, poly_branches) = p;
         let special_x = BigUint::from_bytes_be(merkle_root);
 
         let ys = get_pseudorandom_indices(&element.root2, rou_deg / 4/*TODO excludeMultiplesOF?*/);
+
+        println!("ys: ");
+        for y in ys {
+            println!("{}", &y);
+        }
     }
+    */
 
     true
 }
@@ -259,10 +279,6 @@ fn fft_inv(v: &Vec<BigUint>, root_of_unity: &BigUint, modulus: &BigUint) -> Vec<
     
     // println!("invlen is {}", &invlen);
     result = result.iter().map(|x| (x.clone() * &invlen) % modulus).collect();
-    println!("final result is ");
-    for r in &result {
-        println!("{}", r);
-    }
 
     //assert!(&result[result.len()-1] == &FromStr::from_str("29192221157829857950777572926076894872131454422527235476297526286525450540865").unwrap(), "unexpected end of output");
 
@@ -290,41 +306,18 @@ fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUi
 
     let val = G2.modpow(&BigUint::from(EXTENSION_FACTOR*skips2), &modulus);
 
-    //println!("skips is {}", skips);
-    //println!("extension factor is {}", EXTENSION_FACTOR);
-    //println!("num_steps is {}", num_steps);
     assert!(num_steps == 8192, "num steps incorrect");
-    //println!("G2 is {}", G2);
     assert!(G2 == FromStr::from_str("41913712888260089065520476180880993127517355946012995597287997778376518235852").unwrap(), "G2 isn't correct");
 
-    //println!("constants mini polynomial root is {}",  &val);
+
     assert!(val == FromStr::from_str("56670364103764250102176604807203318908867195832872336813161821519223575486477").unwrap(), "constants mini polynomial root wasn't correct");
 
-    //println!("m-p {}", &((modulus.clone() - BigUint::from(1u32)) / precision));
-
-    /*
-    println!("precision {}", precision);
-    println!("G2 {}", G2);
-    println!("skips {}", skips);
-    println!("constants: ");
-    */
-
-    /*
-    for constant in round_constants {
-        println!("{}", constant);
-    }
-    */
-
-    //println!("val {}", &val.internal_value());
-    //println!("modulus {}", &modulus);
-
     let constants_mini_polynomial = fft_inv(round_constants, &val, &modulus);
+    assert!(constants_mini_polynomial[constants_mini_polynomial.len()-1] == FromStr::from_str("114438966298574221400558587944897110775439695130591918280658208104532468844382").unwrap(), "polynomial last element wasn't correct");
     
-    /*
-    if !verify_low_degree_proof(&proof.l_merkle_root, &Fp::new(G2.clone()), proof.fri_proof, &Fp::new(BigUint::from(num_steps * 2)), &modulus /*exclude_multiples_of=extension_factor*/) {
+    if !verify_low_degree_proof(&proof.l_merkle_root, &G2, proof.fri_proof, &BigUint::from(num_steps * 2), &modulus /*exclude_multiples_of=extension_factor*/) {
         return false;
     }
-    */
 
     // TODO perform spot checks
 
