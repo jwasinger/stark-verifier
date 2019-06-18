@@ -125,19 +125,37 @@ fn simple_ft(vals: &Vec<BigUint>, roots_of_unity: &Vec<BigUint>, modulus: &BigUi
     output
 }
 
+// do (a-b)%modulus where a may be greater than b
+// inspiration: https://internals.rust-lang.org/t/mathematical-modulo-operator/5952
+fn _magic(a: &BigUint, b: &BigUint, modulus: &BigUint) -> BigUint {
+    match b > a {
+        true => {
+            let res = b - a;
+            // want to find a number modulus * k + res > 0 
+            let mut k: BigUint = BigUint::from(1u8);
+            let mul_fac: BigUint = BigUint::from(10u8);
+
+            loop {
+              // println!("k is {}", modulus * &k);
+              //println!("res is {}", res);
+              if (modulus * &k) > res {
+                    let res = ((modulus * &k) - res) % modulus;
+                    // println!("modulus * k - res % modulus = {}", &res);
+                    return res;
+              }
+
+              k = k * &mul_fac;
+            }
+        },
+        false => {
+            return (a-b) % modulus;
+        }
+    }
+}
+
 fn _fft(v: &Vec<BigUint>, roots: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUint> {
     if v.len() <= 4 {
         return simple_ft(v, roots, &modulus);
-    }
-
-    println!("val:");
-    for val in v {
-        println!("{}", &val);
-    }
-
-    println!("roots:");
-    for root in roots {
-        println!("{}", &root);
     }
 
     let right_vals: Vec<BigUint> = v.iter().enumerate().filter(|&(i, _)| i % 2 != 0).map(|(_, e)| e.clone()).collect();
@@ -147,25 +165,61 @@ fn _fft(v: &Vec<BigUint>, roots: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUin
     let left = _fft(&left_vals, &new_roots, &modulus);
     let right = _fft(&right_vals, &new_roots, &modulus); 
 
-    println!("left vals: ");
+    /*
+    println!("left is: ");
     for val in &left {
         println!("{}", &val);
     }
 
-    println!("right vals: ");
+    println!("right is: ");
     for val in &right {
         println!("{}", &val);
     }
+    */
 
     let mut output: Vec<BigUint> = vec![BigUint::from(0u32); v.len()];
 
     // TODO why does y not need to be dereferenced here?
     for (i, (x, y)) in left.iter().zip(right).enumerate() {
         let y_times_root: BigUint = y * &roots[i];
+
         output[i] = x+&y_times_root.clone() % modulus;
         //println!("x {}, y {}, z {}, a {}", x, x-&y_times_root, (x-&y_times_root) % modulus);
-        output[i+left.len()] = (x-&y_times_root) % modulus;
+
+        output[i+left.len()] = _magic(x, &y_times_root, &modulus);
+
+        //println!("(x-y_times_root) % modulus = {}", output[i+left.len()]
+        /*
+        output[i+left.len()] = match x >= &y_times_root {
+            true => (x-&y_times_root) % modulus,
+            false => (&y_times_root - x) % modulus
+        };
+        */
+        
+        //println!("y times root = {}", &y_times_root);
+        //println!("modulus = {}", &modulus);
+
+        /*
+        if x >= &y_times_root {
+            println!("x-y_times_root = {}", x-&y_times_root);
+            println!("(x-y_times_root) % modulus = {}", (x-&y_times_root) % modulus);
+        } else {
+            println!("y_times_root - x = {}", &y_times_root - x);
+            println!("(y_times_root-x) % modulus = {}", (&y_times_root - x) % modulus);
+        }
+        */
+
+        //println!("O[i] = {}", output[i]);
+        //println!("O[i+len(L)] = {}", output[i+left.len()]);
     }
+
+    /*
+    println!("output is: ");
+    for ref item in &output {
+        println!("{}", item);
+    }
+    */
+
 
     output
 }
@@ -192,7 +246,7 @@ fn fft_inv(v: &Vec<BigUint>, root_of_unity: &BigUint, modulus: &BigUint) -> Vec<
     roots_of_unity.reverse();
     roots_of_unity.remove(roots_of_unity.len()-1);
 
-    let invlen = BigUint::from(vals.len()).modpow(&modulus, &(modulus-BigUint::from(1u8)));
+    let invlen = BigUint::from(vals.len()).modpow(&(modulus-BigUint::from(2u8)), &modulus);
 
     /*
     println!("roots of unity: ");
@@ -201,7 +255,16 @@ fn fft_inv(v: &Vec<BigUint>, root_of_unity: &BigUint, modulus: &BigUint) -> Vec<
     }
     */
 
-    let result: Vec<BigUint> = _fft(v, &roots_of_unity, modulus).iter().map(|x| (x.clone() * &invlen) % modulus).collect();
+    let mut result: Vec<BigUint> = _fft(v, &roots_of_unity, modulus);
+    
+    // println!("invlen is {}", &invlen);
+    result = result.iter().map(|x| (x.clone() * &invlen) % modulus).collect();
+    println!("final result is ");
+    for r in &result {
+        println!("{}", r);
+    }
+
+    //assert!(&result[result.len()-1] == &FromStr::from_str("29192221157829857950777572926076894872131454422527235476297526286525450540865").unwrap(), "unexpected end of output");
 
     result
 }
@@ -227,11 +290,15 @@ fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUi
 
     let val = G2.modpow(&BigUint::from(EXTENSION_FACTOR*skips2), &modulus);
 
-    println!("skips is {}", skips);
-    println!("extension factor is {}", EXTENSION_FACTOR);
-    println!("num_steps is {}", num_steps);
-    println!("G2 is {}", G2);
-    println!("constants mini polynomial root is {}",  &val);
+    //println!("skips is {}", skips);
+    //println!("extension factor is {}", EXTENSION_FACTOR);
+    //println!("num_steps is {}", num_steps);
+    assert!(num_steps == 8192, "num steps incorrect");
+    //println!("G2 is {}", G2);
+    assert!(G2 == FromStr::from_str("41913712888260089065520476180880993127517355946012995597287997778376518235852").unwrap(), "G2 isn't correct");
+
+    //println!("constants mini polynomial root is {}",  &val);
+    assert!(val == FromStr::from_str("56670364103764250102176604807203318908867195832872336813161821519223575486477").unwrap(), "constants mini polynomial root wasn't correct");
 
     //println!("m-p {}", &((modulus.clone() - BigUint::from(1u32)) / precision));
 
