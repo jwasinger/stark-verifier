@@ -29,9 +29,11 @@ impl StarkProof {
             return Err(From::from("preamble section was bad"));
         }
 
+        /*
         if data.len() != 64 {
             return Err(From::from("data length should only be 64 elements"));
         }
+        */
 
         /*
         if data.len() % size_of::<LowDegreeProofElement>() != 0 {
@@ -61,8 +63,9 @@ impl StarkProof {
         merkle_root.clone_from_slice(&data[0..PREAMBLE_SIZE-32]);
         l_merkle_root.clone_from_slice(&data[(PREAMBLE_SIZE-32)..PREAMBLE_SIZE]);
 
-        let (merkle_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..]).expect("merkle branches malformed");
-        let (linear_comb_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..]).expect("linear combination malformed");
+        let (merkle_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..data.len()]).expect("merkle branches malformed");
+        let (linear_comb_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE+next_offset..data.len()]).expect("linear combination malformed");
+
         /*
         let (fri_proof, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..]).expect("linear combination malformed");
         */

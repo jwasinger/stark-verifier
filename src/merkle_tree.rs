@@ -35,7 +35,7 @@ impl Witnesses {
     }
 
     fn deserialize(bytes: &[u8], witnesses_len: u8) -> Option<Self> {
-        assert!(witnesses_len as usize * 32 == bytes[8..].len(), "bad length for witnesses");
+        assert!(witnesses_len as usize * 32 == bytes.len() - 8, "bad length for witnesses");
 
         let mut res: Vec<Digest> = Vec::with_capacity(witnesses_len as usize);
 
@@ -59,7 +59,8 @@ impl Witnesses {
 
         while idx < bytes.len() {
             let witnesses_len = bytes[idx];
-            assert!(witnesses_len < 15, "too many witnesses!");
+            assert!(witnesses_len > 0, "witnesses len 0 in header");
+            assert!(witnesses_len <= 17, format!("too many witnesses: {}", witnesses_len));
             assert!(bytes.len() - idx >= witnesses_len as usize * 32, "incorrect witness size or missing witness data");
 
             res.push(Self::deserialize(&bytes[idx..witnesses_len as usize * 32], witnesses_len)?);

@@ -10,6 +10,7 @@ use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
 use std::str::FromStr;
 
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 
@@ -319,8 +320,13 @@ fn verify_mimc_proof(inp: BigUint, num_steps: usize, round_constants: &Vec<BigUi
 }
 
 fn main() {
-    let serialized_proof = hex::decode("53a0e380573d3bada3a837e48d93aafa7ef8598cad5164919bbf890f445f04ecf0aeca09558102275bbf9cc82f49d71b37ae96fef1aa3141ae805deb0e80fd14").unwrap();
-    let proof = StarkProof::deserialize(&serialized_proof).expect("couldn't deserialize"); 
+    //let serialized_proof = hex::decode("53a0e380573d3bada3a837e48d93aafa7ef8598cad5164919bbf890f445f04ecf0aeca09558102275bbf9cc82f49d71b37ae96fef1aa3141ae805deb0e80fd14").unwrap();
+    let mut file = File::open("proof.bin").unwrap();
+    let mut buffer = Vec::new();
+
+    file.read_to_end(&mut buffer).unwrap();
+
+    let proof = StarkProof::deserialize(&buffer).expect("couldn't deserialize"); 
     const LOG_STEPS: usize = 13;
     let mut constants: Vec<BigUint> = Vec::new();
     let modulus: BigUint = BigUint::from_str(MODULUS).expect("modulus couldn't be deserialized into bigint");
