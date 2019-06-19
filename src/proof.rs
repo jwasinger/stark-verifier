@@ -1,4 +1,5 @@
 use std::mem::{size_of};
+use crate::merkle_tree::{Witnesses};
 
 const PREAMBLE_SIZE: usize = 64;
 
@@ -55,9 +56,17 @@ impl StarkProof {
         let mut merkle_root = [0u8; 32];
         let mut l_merkle_root = [0u8; 32];
         let mut low_degree_proof: Vec<LowDegreeProofElement> = Vec::new();
+        let mut next_offset: usize = 0;
 
         merkle_root.clone_from_slice(&data[0..PREAMBLE_SIZE-32]);
         l_merkle_root.clone_from_slice(&data[(PREAMBLE_SIZE-32)..PREAMBLE_SIZE]);
+
+        let (merkle_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..]).expect("merkle branches malformed");
+        let (linear_comb_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..]).expect("linear combination malformed");
+        /*
+        let (fri_proof, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..]).expect("linear combination malformed");
+        */
+
 
         let mut low_degree_proof = Self {
             merkle_root, 

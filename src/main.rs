@@ -4,6 +4,7 @@ Proof:
 */
 
 pub mod proof;
+pub mod merkle_tree;
 
 use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
@@ -95,6 +96,8 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proo
         let special_x = BigUint::from_bytes_be(merkle_root);
 
         let ys = get_pseudorandom_indices(&element.root2, rou_deg / 4/*TODO excludeMultiplesOF?*/);
+
+        // let poly_positions = sum([[y + (roudeg // 4) * j for j in range(4)] for y in ys], []);
 
         println!("ys: ");
         for y in ys {
