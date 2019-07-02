@@ -1,10 +1,14 @@
-/*
+  /*
 Proof:
     merkle roots of P, D, spot check merkle proofs, low-degree proofs of P and D
 */
 
+
 pub mod proof;
 pub mod merkle_tree;
+
+#[macro_use]
+extern crate lazy_static;
 
 use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
@@ -17,6 +21,7 @@ use std::io::prelude::*;
 use blake2::{Blake2b, Digest};
 use std::mem::transmute;
 use self::proof::{StarkProof, LowDegreeProofElement};
+use merkle_tree::Proof;
 
 const EXTENSION_FACTOR: usize = 8;
 const MODULUS: &str = "115792089237316195423570985008687907853269984665640564039457584006405596119041";
@@ -70,6 +75,7 @@ fn is_power_of_2(n: u32) -> bool {
     }
 }
 
+
 fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proof: Vec<LowDegreeProofElement>, max_deg_plus_1: &BigUint, modulus: &BigUint) -> bool {
     println!("verifying low degree proof");
     let mut test_val = root_of_unity.clone(); 
@@ -92,6 +98,9 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proo
     assert!(&rou_deg == &65536usize, "invalid roudeg");
     assert!(&quartic_roots_of_unity[3] == &FromStr::from_str("80127877722526290441229381276271393407378829608771736609433200039324583025757").unwrap(), "bad quartic roots of unity..");
 
+
+
+    /* TODO
     for element in proof {
         //let (root2, column_branches, poly_branches) = p;
         let special_x = BigUint::from_bytes_be(merkle_root);
@@ -105,6 +114,7 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proo
             println!("{}", &y);
         }
     }
+    */
 
     true
 }
