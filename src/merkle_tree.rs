@@ -1,16 +1,20 @@
 use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
 use blake2::{Blake2s, Digest};
+use std::fs::File;
+use std::io::Read;
 
-type Value = [u8; 32];
-type MerkleDigest = [u8; 32];
+pub type Value = [u8; 32];
+pub type MerkleDigest = [u8; 32];
 
+#[derive(Default)]
 pub struct ProofBranch {
     witnesses: Vec<MerkleDigest>,
     value: [u8; 32],
     idx: u32,
 }
 
+#[derive(Default)]
 pub struct MultiProof {
     branches: Vec<ProofBranch>,
     root: MerkleDigest,
@@ -29,6 +33,57 @@ impl MultiProof {
        }
 
         Some(res) 
+    }
+
+	fn as_u32_le(array: &[u8; 4]) -> u32 {
+		((array[0] as u32) <<  0) +
+		((array[1] as u32) <<  8) +
+		((array[2] as u32) << 16) +
+		((array[3] as u32) << 24)
+	}
+
+    pub fn deserialize(mut f: &File) -> Self {
+        let mut branches: MultiProof = Default::default();
+        let mut num_branches_bytes = [0u8; 4];
+		let mut num_branches: u32 = 0;
+
+		f.read_exact(&mut num_branches_bytes).unwrap();
+		num_branches = Self::as_u32_le(&num_branches_bytes);
+
+        let mut branches: Vec<ProofBranch> = Default::default();
+
+        for branch in 0..(num_branches as usize) {
+            let mut num_witnesses_bytes = [0u8; 4];
+            let mut num_witnesses: u32 = 0;
+            let mut value: Value = [0u8; 32];
+            let mut idx: u32 = 0;
+            let mut idx_bytes = [0u8; 4];
+            let mut witnesses: Vec<MerkleDigest> = Default::default();
+
+            f.read_exact(&mut value).unwrap();
+            f.read_exact(&mut idx_bytes).unwrap();
+            idx = Self::as_u32_le(&mut idx_bytes);
+
+            f.read_exact(&mut num_witnesses_bytes).unwrap();
+            num_witnesses = Self::as_u32_le(&mut num_witnesses_bytes);
+
+            for i in 0..(num_witnesses as usize) {
+                let mut witness = [0u8; 32];
+                f.read_exact(&mut witness);
+                witnesses.push(witness);
+            }
+
+            branches.push(ProofBranch {
+                witnesses: witnesses,
+                value: value,
+                idx: idx
+            });
+        }
+
+        MultiProof {
+            branches: Default::default(),
+            root: Default::default()
+        }
     }
 }
 
