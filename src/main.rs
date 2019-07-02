@@ -21,7 +21,7 @@ use std::io::prelude::*;
 use blake2::{Blake2b, Digest};
 use std::mem::transmute;
 use self::proof::{StarkProof, LowDegreeProofElement};
-use merkle_tree::Proof;
+use merkle_tree::MultiProof;
 
 const EXTENSION_FACTOR: usize = 8;
 const MODULUS: &str = "115792089237316195423570985008687907853269984665640564039457584006405596119041";
@@ -98,9 +98,6 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proo
     assert!(&rou_deg == &65536usize, "invalid roudeg");
     assert!(&quartic_roots_of_unity[3] == &FromStr::from_str("80127877722526290441229381276271393407378829608771736609433200039324583025757").unwrap(), "bad quartic roots of unity..");
 
-
-
-    /* TODO
     for element in proof {
         //let (root2, column_branches, poly_branches) = p;
         let special_x = BigUint::from_bytes_be(merkle_root);
@@ -114,7 +111,6 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], root_of_unity: &BigUint, proo
             println!("{}", &y);
         }
     }
-    */
 
     true
 }
