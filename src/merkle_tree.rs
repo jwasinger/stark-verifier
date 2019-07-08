@@ -3,6 +3,7 @@ use rustfft::num_traits::Pow;
 use blake2::{Blake2s, Digest};
 use std::fs::File;
 use std::io::Read;
+use crate::utils::{as_u32_le};
 
 pub type Value = [u8; 32];
 pub type MerkleDigest = [u8; 32];
@@ -11,7 +12,6 @@ pub type MerkleDigest = [u8; 32];
 pub struct ProofBranch {
     witnesses: Vec<MerkleDigest>,
     value: [u8; 32],
-    idx: u32,
 }
 
 #[derive(Default)]
@@ -21,11 +21,13 @@ pub struct MultiProof {
 }
 
 impl MultiProof {
-    pub fn verify(&self) -> Option<Vec<Value>> {
+    pub fn verify(&self, indices: &[u32]) -> Option<Vec<Value>> {
        let mut res: Vec<Value> = Default::default();
 
-       for branch in self.branches.iter() {
-            if let Some(value) = branch.verify(&self.root)  {
+       // assert!(self.branches.len() == indices.len(), format!("branches len {} != indices len {}", self.branches.len(), indices.len()));
+
+       for (branch, i) in self.branches.iter().zip(indices.iter()) {
+            if let Some(value) = branch.verify(&self.root, *i)  {
                 res.push(value);
             } else {
                 return None;
@@ -35,37 +37,33 @@ impl MultiProof {
         Some(res) 
     }
 
-	fn as_u32_le(array: &[u8; 4]) -> u32 {
-		((array[0] as u32) <<  0) +
-		((array[1] as u32) <<  8) +
-		((array[2] as u32) << 16) +
-		((array[3] as u32) << 24)
-	}
-
     pub fn deserialize(mut f: &File) -> Self {
         let mut branches: MultiProof = Default::default();
         let mut num_branches_bytes = [0u8; 4];
 		let mut num_branches: u32 = 0;
 
+
 		f.read_exact(&mut num_branches_bytes).unwrap();
-		num_branches = Self::as_u32_le(&num_branches_bytes);
+		num_branches = as_u32_le(&num_branches_bytes);
+
+        //println!("num_branches is {}", num_branches);
 
         let mut branches: Vec<ProofBranch> = Default::default();
 
         for branch in 0..(num_branches as usize) {
-            let mut num_witnesses_bytes = [0u8; 4];
-            let mut num_witnesses: u32 = 0;
+            let mut witnesses_size_bytes = [0u8; 4];
             let mut value: Value = [0u8; 32];
-            let mut idx: u32 = 0;
-            let mut idx_bytes = [0u8; 4];
             let mut witnesses: Vec<MerkleDigest> = Default::default();
 
             f.read_exact(&mut value).unwrap();
-            f.read_exact(&mut idx_bytes).unwrap();
-            idx = Self::as_u32_le(&mut idx_bytes);
+            f.read_exact(&mut witnesses_size_bytes).unwrap();
+            // println!("value is {:x?}", &value);
+            // println!("witnesses_size_bytes {:x?}", &witnesses_size_bytes);
 
-            f.read_exact(&mut num_witnesses_bytes).unwrap();
-            num_witnesses = Self::as_u32_le(&mut num_witnesses_bytes);
+            let witnesses_size = as_u32_le(&mut witnesses_size_bytes);
+            assert!(witnesses_size % 32 == 0, "witnesses should all be 32 bytes");
+
+            let num_witnesses = witnesses_size / 32;
 
             for i in 0..(num_witnesses as usize) {
                 let mut witness = [0u8; 32];
@@ -75,21 +73,24 @@ impl MultiProof {
 
             branches.push(ProofBranch {
                 witnesses: witnesses,
-                value: value,
-                idx: idx
+                value: value
             });
         }
 
-        MultiProof {
-            branches: Default::default(),
+        //println!("merkle deserialization successsful");
+
+        let multiproof = MultiProof {
+            branches: branches,
             root: Default::default()
-        }
+        };
+
+        multiproof
     }
 }
 
 impl ProofBranch {
     // expect the witnesses to be sorted in reverse
-    pub fn verify(&self, root: &MerkleDigest) -> Option<[u8; 32]> {
+    pub fn verify(&self, root: &MerkleDigest, idx: u32) -> Option<[u8; 32]> {
 
         //hasher.input(&self.value);
 
@@ -98,32 +99,32 @@ impl ProofBranch {
         res[0..32].clone_from_slice(&self.value);
 
         //let mut res = blake2::hash(proof.value);
-        let mut tree_index = 2usize.pow((self.witnesses.len() + 1) as u32) + self.idx as usize;
+        let mut tree_index = 2usize.pow((self.witnesses.len() + 1) as u32) + idx as usize;
         // assert!(self.witnesses.len() == 256, "invalid proof length");
 
         for (i, witness) in self.witnesses.iter().enumerate() {
             let mut hasher = Blake2s::default();
-            println!("tree_index is {}", tree_index);
+            //println!("tree_index is {}", tree_index);
 
             if tree_index % 2 != 0 {
-              println!("left");
+              //println!("left");
 
               let b: &[u8] = &res[0..32];
               let o: &[u8] = &[&witness[..], &b].concat();
               hasher = Default::default();
               hasher.input(o);
-              println!("witness part is {}", hex::encode(&witness[..]));
-              println!("computed part is {}", hex::encode(&b));
-              println!("input is {}", hex::encode(o));
+              //println!("witness part is {}", hex::encode(&witness[..]));
+              //println!("computed part is {}", hex::encode(&b));
+              //println!("input is {}", hex::encode(o));
               //res = hasher.result();
               res[0..32].clone_from_slice(&hasher.result()[0..32]);
             } else {
-              println!("right");
+              //println!("right");
               let b: &[u8] = &res[0..32];
               let o: &[u8] = &[&b, &witness[..]].concat();
-              println!("witness part is {}", hex::encode(&witness[..]));
-              println!("computed part is {}", hex::encode(&b));
-              println!("input is {}", hex::encode(o));
+              //println!("witness part is {}", hex::encode(&witness[..]));
+              //println!("computed part is {}", hex::encode(&b));
+              //println!("input is {}", hex::encode(o));
               hasher.input(o);
               //res = hasher.result();
               res[0..32].clone_from_slice(&hasher.result()[0..32]);
@@ -131,7 +132,7 @@ impl ProofBranch {
 
             tree_index = tree_index / 2;
 
-            println!("res is {}", hex::encode(&res[0..32]));
+            //println!("res is {}", hex::encode(&res[0..32]));
         }
 
         //assert!(&res[0..32] == &self.root, format!("values didn't match up {} != {}", hex::encode(&res[0..32]), hex::encode(&self.root)));
@@ -177,10 +178,9 @@ mod tests {
 
         let proof_branch = ProofBranch {
             witnesses,
-            value,
-            idx
+            value
         };
 
-        assert!(proof_branch.verify(&root).is_some(), "proof was invalid");
+        assert!(proof_branch.verify(&root, root).is_some(), "proof was invalid");
     }
 }
