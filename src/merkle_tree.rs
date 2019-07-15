@@ -1,4 +1,3 @@
-use num_bigint::BigUint;
 use rustfft::num_traits::Pow;
 use blake2::{Blake2s, Digest};
 use std::fs::File;
@@ -10,26 +9,34 @@ pub type MerkleDigest = [u8; 32];
 
 #[derive(Default)]
 pub struct ProofBranch {
-    witnesses: Vec<MerkleDigest>,
-    value: [u8; 32],
+    pub witnesses: Vec<MerkleDigest>,
+    pub value: [u8; 32],
 }
 
 #[derive(Default)]
 pub struct MultiProof {
-    branches: Vec<ProofBranch>,
-    root: MerkleDigest,
+    pub branches: Vec<ProofBranch>,
+    pub root: MerkleDigest, // TODO remove this field and only allow it to be passed as a parameter to 'verify'
 }
 
+// TODO replace this with the crate version https://github.com/jwasinger/binary-merkle-trie
 impl MultiProof {
-    pub fn verify(&self, indices: &[u32]) -> Option<Vec<Value>> {
+    pub fn verify(&self, indices: &[u32], rt: Option<MerkleDigest>) -> Option<Vec<Value>> {
        let mut res: Vec<Value> = Default::default();
 
-       // assert!(self.branches.len() == indices.len(), format!("branches len {} != indices len {}", self.branches.len(), indices.len()));
+       assert!(self.branches.len() == indices.len(), format!("branches len {} != indices len {}", self.branches.len(), indices.len()));
+
+       let root = match rt {
+           Some(r) => r.clone(),
+           None => self.root.clone()
+       };
 
        for (branch, i) in self.branches.iter().zip(indices.iter()) {
-            if let Some(value) = branch.verify(&self.root, *i)  {
+            if let Some(value) = branch.verify(&root, *i)  {
+                //println!("verified {}", i);
                 res.push(value);
             } else {
+                //println!("shit");
                 return None;
             }
        }
@@ -77,8 +84,6 @@ impl MultiProof {
             });
         }
 
-        //println!("merkle deserialization successsful");
-
         let multiproof = MultiProof {
             branches: branches,
             root: Default::default()
@@ -89,18 +94,35 @@ impl MultiProof {
 }
 
 impl ProofBranch {
+    fn permute_4_indices(indices: &Vec<u32>, L: u32) -> Vec<u32> {
+        let mut res: Vec<u32> = Vec::new();
+        let ld4 = L / 4;
+        indices.iter().map(|idx| {
+            res.push(Self::permute_4_index(*idx, ld4));
+        });
+
+        res
+    }
+
+    fn permute_4_index(x: u32, L: u32) -> u32 {
+        let ld4 = L / 4;
+        let res = (x / ld4) + 4 * (x % ld4);
+        //println!("ld4 is {}", &ld4);
+        //println!("res is {}", &res);
+        res
+    }
+
     // expect the witnesses to be sorted in reverse
-    pub fn verify(&self, root: &MerkleDigest, idx: u32) -> Option<[u8; 32]> {
+    pub fn verify(&self, root: &MerkleDigest, a: u32) -> Option<[u8; 32]> {
+        let idx = Self::permute_4_index(a, 2u32.pow((self.witnesses.len()) as u32));
 
-        //hasher.input(&self.value);
 
+        //println!("value is {}", hex::encode(&self.value));
         let mut res: MerkleDigest = [0u8; 32];
         //assert!(hasher.result().len() == 32, "invalid digest result");
         res[0..32].clone_from_slice(&self.value);
 
-        //let mut res = blake2::hash(proof.value);
         let mut tree_index = 2usize.pow((self.witnesses.len() + 1) as u32) + idx as usize;
-        // assert!(self.witnesses.len() == 256, "invalid proof length");
 
         for (i, witness) in self.witnesses.iter().enumerate() {
             let mut hasher = Blake2s::default();
@@ -118,6 +140,7 @@ impl ProofBranch {
               //println!("input is {}", hex::encode(o));
               //res = hasher.result();
               res[0..32].clone_from_slice(&hasher.result()[0..32]);
+              //println!("res is {}", hex::encode(&res[0..32]));
             } else {
               //println!("right");
               let b: &[u8] = &res[0..32];
@@ -128,6 +151,7 @@ impl ProofBranch {
               hasher.input(o);
               //res = hasher.result();
               res[0..32].clone_from_slice(&hasher.result()[0..32]);
+              //println!("res is {}", hex::encode(&res[0..32]));
             }
 
             tree_index = tree_index / 2;
@@ -135,9 +159,9 @@ impl ProofBranch {
             //println!("res is {}", hex::encode(&res[0..32]));
         }
 
-        //assert!(&res[0..32] == &self.root, format!("values didn't match up {} != {}", hex::encode(&res[0..32]), hex::encode(&self.root)));
+        assert!(&res[0..32] == root, format!("values didn't match up {} != {}", hex::encode(&res[0..32]), hex::encode(root)));
         if &res == root {
-            Some(res)
+            Some(self.value.clone())
         } else {
             None
         }
