@@ -1,37 +1,26 @@
-use num_bigint::BigUint;
+use num_bigint::BigInt;
+use crate::utils::{negative_to_positive};
 
 // do (a-b)%modulus where a may be greater than b
 // inspiration: https://internals.rust-lang.org/t/mathematical-modulo-operator/5952
-fn submod(a: &BigUint, b: &BigUint, modulus: &BigUint) -> BigUint {
+fn submod(a: &BigInt, b: &BigInt, modulus: &BigInt) -> BigInt {
     match b > a {
         true => {
             let res = b - a;
-            // want to find a number modulus * k + res > 0 
-            let mut k: BigUint = BigUint::from(1u8);
-            let mul_fac: BigUint = BigUint::from(10u8);
-
-            loop {
-              if (modulus * &k) > res {
-                    let res = ((modulus * &k) - res) % modulus;
-                    // println!("modulus * k - res % modulus = {}", &res);
-                    return res;
-              }
-
-              k = k * &mul_fac;
-            }
+            negative_to_positive(&res, modulus)
         },
         false => {
-            return (a-b) % modulus;
+            (a-b) % modulus
         }
     }
 }
 
-fn simple_ft(vals: &Vec<BigUint>, roots_of_unity: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUint> {
+fn simple_ft(vals: &Vec<BigInt>, roots_of_unity: &Vec<BigInt>, modulus: &BigInt) -> Vec<BigInt> {
     if vals.len() > 4 {
         panic!("called ft with more than four arguments");
     }
 
-    let mut output: Vec<BigUint> = Vec::new();
+    let mut output: Vec<BigInt> = Vec::new();
 
     /*
     println!("simple ft vals");
@@ -46,7 +35,7 @@ fn simple_ft(vals: &Vec<BigUint>, roots_of_unity: &Vec<BigUint>, modulus: &BigUi
     */
 
     for i in 0..roots_of_unity.len() {
-        let mut last = BigUint::from(0u8);
+        let mut last = BigInt::from(0u8);
         for j in 0..roots_of_unity.len() {
             last += vals[j].clone() * &roots_of_unity[(i*j) % roots_of_unity.len()];
         }
@@ -57,14 +46,14 @@ fn simple_ft(vals: &Vec<BigUint>, roots_of_unity: &Vec<BigUint>, modulus: &BigUi
     output
 }
 
-fn _fft(v: &Vec<BigUint>, roots: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUint> {
+fn _fft(v: &Vec<BigInt>, roots: &Vec<BigInt>, modulus: &BigInt) -> Vec<BigInt> {
     if v.len() <= 4 {
         return simple_ft(v, roots, &modulus);
     }
 
-    let right_vals: Vec<BigUint> = v.iter().enumerate().filter(|&(i, _)| i % 2 != 0).map(|(_, e)| e.clone()).collect();
-    let left_vals: Vec<BigUint>  = v.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
-    let new_roots: Vec<BigUint> = roots.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
+    let right_vals: Vec<BigInt> = v.iter().enumerate().filter(|&(i, _)| i % 2 != 0).map(|(_, e)| e.clone()).collect();
+    let left_vals: Vec<BigInt>  = v.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
+    let new_roots: Vec<BigInt> = roots.iter().enumerate().filter(|&(i, _)| i % 2 == 0).map(|(_, e)| e.clone()).collect();
 
     let left = _fft(&left_vals, &new_roots, &modulus);
     let right = _fft(&right_vals, &new_roots, &modulus); 
@@ -81,11 +70,11 @@ fn _fft(v: &Vec<BigUint>, roots: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUin
     }
     */
 
-    let mut output: Vec<BigUint> = vec![BigUint::from(0u32); v.len()];
+    let mut output: Vec<BigInt> = vec![BigInt::from(0u32); v.len()];
 
     // TODO why does y not need to be dereferenced here?
     for (i, (x, y)) in left.iter().zip(right).enumerate() {
-        let y_times_root: BigUint = y * &roots[i];
+        let y_times_root: BigInt = y * &roots[i];
 
         output[i] = x+&y_times_root.clone() % modulus;
         //println!("x {}, y {}, z {}, a {}", x, x-&y_times_root, (x-&y_times_root) % modulus);
@@ -129,14 +118,14 @@ fn _fft(v: &Vec<BigUint>, roots: &Vec<BigUint>, modulus: &BigUint) -> Vec<BigUin
 }
 
 // inverse fast fourier transform
-pub fn fft_inv(v: &Vec<BigUint>, root_of_unity: &BigUint, modulus: &BigUint) -> Vec<BigUint> {
-    let mut roots_of_unity: Vec<BigUint>  = vec![BigUint::from(1u32), root_of_unity.clone()];
+pub fn fft_inv(v: &Vec<BigInt>, root_of_unity: &BigInt, modulus: &BigInt) -> Vec<BigInt> {
+    let mut roots_of_unity: Vec<BigInt>  = vec![BigInt::from(1u32), root_of_unity.clone()];
     let mut vals = v.clone();
 
     //let const modulus = Fp::get_modulus();
 
    // println!("root of unity is {}", &root_of_unity);
-    let one = BigUint::from(1u32);
+    let one = BigInt::from(1u32);
     while roots_of_unity[roots_of_unity.len()-1] != one {
         let new_root = (roots_of_unity[roots_of_unity.len()-1].clone() * root_of_unity.clone()) % modulus;
         roots_of_unity.push(new_root);
@@ -144,13 +133,13 @@ pub fn fft_inv(v: &Vec<BigUint>, root_of_unity: &BigUint, modulus: &BigUint) -> 
 
     if roots_of_unity.len() > vals.len() {
         // TODO optimize this so that no array copying is done
-        roots_of_unity.append(&mut vec![BigUint::from(0u32); roots_of_unity.len() - vals.len() - 1]);
+        roots_of_unity.append(&mut vec![BigInt::from(0u32); roots_of_unity.len() - vals.len() - 1]);
     }
 
     roots_of_unity.reverse();
     roots_of_unity.remove(roots_of_unity.len()-1);
 
-    let invlen = BigUint::from(vals.len()).modpow(&(modulus-BigUint::from(2u8)), &modulus);
+    let invlen = BigInt::from(vals.len()).modpow(&(modulus-BigInt::from(2u8)), &modulus);
 
     /*
     println!("roots of unity: ");
@@ -159,7 +148,7 @@ pub fn fft_inv(v: &Vec<BigUint>, root_of_unity: &BigUint, modulus: &BigUint) -> 
     }
     */
 
-    let mut result: Vec<BigUint> = _fft(v, &roots_of_unity, modulus);
+    let mut result: Vec<BigInt> = _fft(v, &roots_of_unity, modulus);
     
     // println!("invlen is {}", &invlen);
     result = result.iter().map(|x| (x.clone() * &invlen) % modulus).collect();

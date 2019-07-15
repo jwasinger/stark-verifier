@@ -48,8 +48,10 @@ impl StarkProof {
         file.read_exact(&mut merkle_root).unwrap();
         file.read_exact(&mut l_merkle_root).unwrap();
 
-        //println!("merkle root is {:x?}", &merkle_root);
-        //println!("merkle root 2 is {:x?}", &l_merkle_root);
+        /*
+        println!("merkle root is {:x?}", &merkle_root);
+        println!("merkle root 2 is {:x?}", &l_merkle_root);
+        */
 
         //let mut num_ldp_elements_bytes = [0u8; 4];
         //file.read_exact(&mut num_ldp_elements_bytes).unwrap();
@@ -81,7 +83,9 @@ impl StarkProof {
 
                 //println!("MERKLE");
                 m.column_branches = MultiProof::deserialize(&mut file);
+                m.column_branches.root = m.root2.clone(); // TODO replace this by having branches reference the same merkle root instead of copying it for each proof
                 m.poly_branches = MultiProof::deserialize(&mut file);
+                //m.poly_branches.root = merkle_root.clone();
                 ldp_merkle_proofs.push(m);
             } else if proof_element_type == POINTS {
                 let mut points_size_bytes = [0u8; 4];
