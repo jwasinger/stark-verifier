@@ -9,17 +9,14 @@ pub fn mimc(input: &BigInt, steps: usize, round_constants: &Vec<BigInt>, modulus
     let mut output = input.clone();
 
 	for i in 0..(steps-1) {
-      output = output.pow(3u32);
-      let mut x = round_constants[i % round_constants.len()].clone() % modulus.clone();
-      output = output + x;
-
-      output = round_constants[i % round_constants.len()].clone() % modulus.clone();
+      output = negative_to_positive(&(output.pow(3u32) + round_constants[i % round_constants.len()].clone()), modulus);
 	}
 
     output
 }
 
 /* 
+  TODO make the first argument not be passed by reference
   Convert a negative number to positive.
   Inspiration:
   https://internals.rust-lang.org/t/mathematical-modulo-operator/5952
@@ -27,7 +24,7 @@ pub fn mimc(input: &BigInt, steps: usize, round_constants: &Vec<BigInt>, modulus
 */
 pub fn negative_to_positive(n: &BigInt, modulus: &BigInt) -> BigInt {
     if !n.is_negative() {
-        return n.clone();
+        return n.clone() % modulus;
     }
 
     let mut k: BigInt = BigInt::from(1u8);
@@ -56,7 +53,7 @@ pub fn is_power_of_2(n: u32) -> bool {
 pub fn get_pseudorandom_indices(seed: &[u8; 32], count: usize, modulus: u32, excludeMultiplesOf: Option<u32>) -> Vec<u32> {
     let mut hasher = Blake2s::default();
     let mut hashes: Vec<u8> = vec![0u8; 32];
-    let mut output: Vec<u32> = Vec::new(); //vec![0u32; count as usize];
+    let mut output: Vec<u32> = Vec::new();
 
     let real_modulus: u32 = match excludeMultiplesOf {
         Some(exclude) => {
@@ -67,20 +64,13 @@ pub fn get_pseudorandom_indices(seed: &[u8; 32], count: usize, modulus: u32, exc
         }
     };
 
-    //println!("modulus is {}", modulus);
-    //println!("start seed is {:x?}", seed);
     hashes[0..32].clone_from_slice(seed/*&hasher.result().clone()*/);
-    //println!("hashes at start is {:x?}", &hashes);
 
-    //println!("doing for count {}", count);
     while hashes.len() < 4 * count {
         hasher = Blake2s::default();
         hasher.input(&hashes[hashes.len()-32..]);
         let result = hasher.result();
-        //println!("input is {:x?}", &hashes[hashes.len()-32..]);
-        //println!("output is {:x?}", &result);
         hashes.extend_from_slice(&result);
-        //println!("size is {}", hashes.len());
     }
 
     for j in (0..(count*4)).step_by(4) {
@@ -129,37 +119,23 @@ pub fn eval_quartic(eq: &[BigInt], y: &BigInt, m: &BigInt) -> BigInt {
     }
 }
 
-/*
-pub fn eval_quartic_no_negative(eq: &[BigInt], x: &BigInt, modulus: &BigInt) -> BigInt {
-    assert!(eq.len() == 4, "only quartic equations supported");
-    let xsq = ( x * x ) % modulus;
-    let xcb = &xsq * x;
-
-    ( &(eq[0]) + &(eq[1]) * x + &(eq[2]) * &xsq + &(eq[3]) * &xcb ) % modulus
+pub fn divmod(x: &BigInt, y: &BigInt, m: &BigInt) -> BigInt {
+    return (x * &inv(y.clone(), m.clone())) % m;
 }
 
-pub fn eval_quartic(eq: &[BigInt], x: &BigInt, modulus: &BigInt) -> BigInt {
-    assert!(eq.len() == 4, "only quartic equations supported");
-    let xsq = ( x * x ) % modulus;
-    let xcb = &xsq * x;
+pub fn eval_poly_at(poly: &Vec<BigInt>, x: &BigInt, m: &BigInt) -> BigInt {
+    let mut y = BigInt::zero();
+    let mut power_of_x = BigInt::one();
 
-    let neg_part =  &(eq[2]) * &xsq;
-
-    // eq[3] will always be negative
-    if &(eq[2]) * &xsq > &(eq[1]) * x + &(eq[0]) /*+ &(eq[3]) * &xcb*/ {
-        ( &(eq[3]) * &xcb + &(eq[0]) + &(eq[1]) * x + negative_to_positive(&neg_part, modulus) ) % modulus
-    } else {
-        /*
-        println!("second");
-        println!(" eq[0] + eq[1] * x = {}", &(eq[0]) + &(eq[1]) * x);
-        println!(" eq[0] + eq[1] * x - eq[2] * xsq = {}", &(eq[0]) + &(eq[1]) * x - &(eq[2]) * &xsq);
-        println!(" eq[0] + eq[1] * x - eq[2] * xsq + eq3 * xcb = {}", ( &(eq[0]) + &(eq[1]) * x - &(eq[2]) * &xsq + &(eq[3]) * &xcb ));
-        */
-        ( &(eq[0]) + &(eq[1]) * x - &(eq[2]) * &xsq + &(eq[3]) * &xcb ) % modulus
+    for p_coef in poly.iter() {
+        y += &power_of_x * p_coef;
+        power_of_x = (power_of_x * x) % m;
     }
-}
-*/
 
+    return y % m;
+}
+
+// modular inverse
 fn inv(x: BigInt, m: BigInt) -> BigInt {
 	let a = BigInt::from(x);
 
@@ -171,7 +147,7 @@ fn inv(x: BigInt, m: BigInt) -> BigInt {
 
     let mut lm = BigInt::one();
     let mut hm = BigInt::zero();
-    let mut low = a % &modulus;
+    let mut low = negative_to_positive(&a, &modulus);
     let mut high = modulus.clone();
 
     while low > BigInt::one() {
@@ -187,7 +163,7 @@ fn inv(x: BigInt, m: BigInt) -> BigInt {
         low = new;
     }
 
-    lm % &modulus
+    negative_to_positive(&lm, &modulus) % &modulus
 }
 
 pub fn multi_inv(values: &[BigInt], modulus: &BigInt) -> Vec<BigInt> {
@@ -205,7 +181,6 @@ pub fn multi_inv(values: &[BigInt], modulus: &BigInt) -> Vec<BigInt> {
     let mut outputs: Vec<BigInt> = vec![BigInt::from(0u8); values.len()];
 
     for i in (1..values.len()+1).rev() {
-        //println!("inv is {}", &inv);
         if values[i-1] == BigInt::from(0u8) {
             outputs[i-1] = BigInt::from(0u8);
             inv = inv % modulus;
@@ -233,7 +208,6 @@ pub fn multi_interp_4(xsets: &Vec<BigInt>, ysets: &Vec<BigInt>, modulus: &BigInt
         let x13 = &(xsets[i+1]) * &(xsets[i+3]);
         let x23 = &(xsets[i+2]) * &(xsets[i+3]);
 
-        // TODO figure out how to translate this signed math into BigInt math
         let eq0: [BigInt; 4] = [negative_to_positive(&-(&x12 * &(xsets[i+3])), modulus) % modulus, &x12 + &x13 + &x23, -&xsets[i+1] - &(xsets[i+2]) - &(xsets[i+3]), BigInt::from(1u8)];
         let eq1 = [negative_to_positive(&(-&x02 * &(xsets[i+3])), modulus) % modulus, &x02 + &x03 + &x23, -&(xsets[i]) - &(xsets[i+2]) - &(xsets[i+3]), BigInt::from(1u8)];
         let eq2 = [negative_to_positive(&(-&x01 * &(xsets[i+3])), modulus) % modulus, &x01 + &x03 + &x13, -&(xsets[i]) - &(xsets[i+1]) - &(xsets[i+3]), BigInt::from(1u8)];
@@ -243,18 +217,6 @@ pub fn multi_interp_4(xsets: &Vec<BigInt>, ysets: &Vec<BigInt>, modulus: &BigInt
         let e1 = eval_quartic(&eq1, &xsets[i+1], modulus);
         let e2 = eval_quartic(&eq2, &xsets[i+2], modulus);
         let e3 = eval_quartic(&eq3, &xsets[i+3], modulus);
-
-        /*
-        println!("eq0 is {} {} {} {}", &eq0[0], &eq0[1], &eq0[2], &eq0[3]);
-        println!("eq1 is {} {} {} {}", &eq1[0], &eq1[1], &eq1[2], &eq1[3]);
-        println!("eq2 is {} {} {} {}", &eq2[0], &eq2[1], &eq2[2], &eq2[3]);
-        println!("eq3 is {} {} {} {}", &eq3[0], &eq3[1], &eq3[2], &eq3[3]);
-
-        println!("e0 is {}", &e0);
-        println!("e1 is {}", &e1);
-        println!("e2 is {}", &e2);
-        println!("e3 is {}", &e3);
-        */
 
         data.push((&ysets[i..i+4], [eq0, eq1, eq2, eq3]));
         inv_targets.push(e0);
@@ -279,4 +241,34 @@ pub fn multi_interp_4(xsets: &Vec<BigInt>, ysets: &Vec<BigInt>, modulus: &BigInt
     }
 
     output
+}
+
+pub fn mul_polys(p0: &Vec<BigInt>, p1: &Vec<BigInt>, modulus: &BigInt) -> Vec<BigInt> {
+    assert!(p0.len() == p1.len(), "polynomials must be the same degree");
+
+    //TODO this seems like pointless double memory allocation (but necessary for rust to compile)
+    let mut output: Vec<BigInt> = vec![BigInt::zero(); p0.len() + p1.len() - 1];
+
+    for (i, _) in p0.iter().enumerate() {
+        for (j, _) in p1.iter().enumerate() {
+            output[i+j] += &p0[i] * &p1[j];
+        }
+    }
+
+    output.iter().map(|x| x  % modulus).collect()
+}
+
+pub fn lagrange_interp_2(xs: &[BigInt; 2], ys: &[BigInt; 2], modulus: &BigInt) -> [BigInt; 2] {
+    let eq0 = [negative_to_positive(&-&xs[1], modulus), BigInt::one()];
+    let eq1 = [negative_to_positive(&-&xs[0], modulus), BigInt::one()];
+    let e0 = eval_poly_at(&eq0.to_vec(), &xs[0], modulus);
+    let e1 = eval_poly_at(&eq1.to_vec(), &xs[1], modulus);
+    let inv_val = inv(&e0 * &e1, modulus.clone());
+    let inv_y0 = &ys[0] * &inv_val * &e1;
+    let inv_y1 = &ys[1] * &inv_val * &e0;
+    let int1 = negative_to_positive(&(&eq0[0] * &inv_y0 + &eq1[0] * &inv_y1), modulus);
+    let int2 = negative_to_positive(&(&eq0[1] * &inv_y0 + &eq1[1] * &inv_y1), modulus);
+
+    [int1,
+     int2]
 }

@@ -4,13 +4,14 @@ use std::fs::File;
 use std::io::Read;
 use crate::utils::{as_u32_le};
 
-pub type Value = [u8; 32];
+pub type Value = Vec<u8>;
 pub type MerkleDigest = [u8; 32];
 
 #[derive(Default)]
 pub struct ProofBranch {
     pub witnesses: Vec<MerkleDigest>,
-    pub value: [u8; 32],
+    pub sibling_value: Value, //should be included as a hash in the list of witnesses but I would have to refactor the python prover merkle tree code
+    pub value: Value,
 }
 
 #[derive(Default)]
@@ -19,7 +20,7 @@ pub struct MultiProof {
     pub root: MerkleDigest, // TODO remove this field and only allow it to be passed as a parameter to 'verify'
 }
 
-// TODO replace this with the crate version https://github.com/jwasinger/binary-merkle-trie
+// TODO update the package version of this code
 impl MultiProof {
     pub fn verify(&self, indices: &[u32], rt: Option<MerkleDigest>) -> Option<Vec<Value>> {
        let mut res: Vec<Value> = Default::default();
@@ -33,10 +34,8 @@ impl MultiProof {
 
        for (branch, i) in self.branches.iter().zip(indices.iter()) {
             if let Some(value) = branch.verify(&root, *i)  {
-                //println!("verified {}", i);
                 res.push(value);
             } else {
-                //println!("shit");
                 return None;
             }
        }
@@ -53,22 +52,27 @@ impl MultiProof {
 		f.read_exact(&mut num_branches_bytes).unwrap();
 		num_branches = as_u32_le(&num_branches_bytes);
 
-        //println!("num_branches is {}", num_branches);
-
         let mut branches: Vec<ProofBranch> = Default::default();
 
         for branch in 0..(num_branches as usize) {
             let mut witnesses_size_bytes = [0u8; 4];
-            let mut value: Value = [0u8; 32];
+            let mut value_size_bytes = [0u8; 4];
+
             let mut witnesses: Vec<MerkleDigest> = Default::default();
 
-            f.read_exact(&mut value).unwrap();
+            f.read_exact(&mut value_size_bytes);
+            let value_size = as_u32_le(&mut value_size_bytes);
+
+            let mut value: Value = vec![0u8; value_size as usize];
+            let mut sibling_value: Value = vec![0u8; value_size as usize];
+
+            f.read_exact(&mut value[0..value_size as usize]).unwrap();
+            f.read_exact(&mut sibling_value[0..value_size as usize]).unwrap();
+
             f.read_exact(&mut witnesses_size_bytes).unwrap();
-            // println!("value is {:x?}", &value);
-            // println!("witnesses_size_bytes {:x?}", &witnesses_size_bytes);
 
             let witnesses_size = as_u32_le(&mut witnesses_size_bytes);
-            assert!(witnesses_size % 32 == 0, "witnesses should all be 32 bytes");
+            assert!(witnesses_size % 32 == 0, format!("witnesses should all be 32 bytes: {}", witnesses_size));
 
             let num_witnesses = witnesses_size / 32;
 
@@ -80,6 +84,7 @@ impl MultiProof {
 
             branches.push(ProofBranch {
                 witnesses: witnesses,
+                sibling_value: sibling_value,
                 value: value
             });
         }
@@ -107,60 +112,58 @@ impl ProofBranch {
     fn permute_4_index(x: u32, L: u32) -> u32 {
         let ld4 = L / 4;
         let res = (x / ld4) + 4 * (x % ld4);
-        //println!("ld4 is {}", &ld4);
-        //println!("res is {}", &res);
         res
     }
 
     // expect the witnesses to be sorted in reverse
-    pub fn verify(&self, root: &MerkleDigest, a: u32) -> Option<[u8; 32]> {
-        let idx = Self::permute_4_index(a, 2u32.pow((self.witnesses.len()) as u32));
+    pub fn verify(&self, root: &MerkleDigest, a: u32) -> Option<Value> {
+        let idx = Self::permute_4_index(a, 2u32.pow((self.witnesses.len()+1) as u32));
 
+        let mut res = vec![0u8; self.value.len()];
+        res[0..self.value.len()].clone_from_slice(&self.value[..]);
 
-        //println!("value is {}", hex::encode(&self.value));
-        let mut res: MerkleDigest = [0u8; 32];
-        //assert!(hasher.result().len() == 32, "invalid digest result");
-        res[0..32].clone_from_slice(&self.value);
+        let mut tree_index = 2usize.pow((self.witnesses.len() + 2) as u32) + idx as usize;
 
-        let mut tree_index = 2usize.pow((self.witnesses.len() + 1) as u32) + idx as usize;
+        let mut h = Blake2s::default();
+
+        if tree_index % 2 != 0 {
+            let b: &[u8] = &res[0..self.value.len()];
+            let o: &[u8] = &[&self.sibling_value[..], &b].concat();
+            h.input(o);
+            res[0..32].clone_from_slice(&h.result()[0..32]);
+
+        } else {
+            let b: &[u8] = &res[0..self.value.len()];
+            let o: &[u8] = &[&b, &self.sibling_value[..]].concat();
+
+            h.input(o);
+            res[0..32].clone_from_slice(&h.result()[0..32]);
+        }
+
+        tree_index = tree_index / 2;
 
         for (i, witness) in self.witnesses.iter().enumerate() {
             let mut hasher = Blake2s::default();
-            //println!("tree_index is {}", tree_index);
 
             if tree_index % 2 != 0 {
-              //println!("left");
-
               let b: &[u8] = &res[0..32];
               let o: &[u8] = &[&witness[..], &b].concat();
               hasher = Default::default();
               hasher.input(o);
-              //println!("witness part is {}", hex::encode(&witness[..]));
-              //println!("computed part is {}", hex::encode(&b));
-              //println!("input is {}", hex::encode(o));
-              //res = hasher.result();
+
               res[0..32].clone_from_slice(&hasher.result()[0..32]);
-              //println!("res is {}", hex::encode(&res[0..32]));
             } else {
-              //println!("right");
               let b: &[u8] = &res[0..32];
               let o: &[u8] = &[&b, &witness[..]].concat();
-              //println!("witness part is {}", hex::encode(&witness[..]));
-              //println!("computed part is {}", hex::encode(&b));
-              //println!("input is {}", hex::encode(o));
               hasher.input(o);
-              //res = hasher.result();
               res[0..32].clone_from_slice(&hasher.result()[0..32]);
-              //println!("res is {}", hex::encode(&res[0..32]));
             }
 
             tree_index = tree_index / 2;
-
-            //println!("res is {}", hex::encode(&res[0..32]));
         }
 
         assert!(&res[0..32] == root, format!("values didn't match up {} != {}", hex::encode(&res[0..32]), hex::encode(root)));
-        if &res == root {
+        if &res[0..32] == root {
             Some(self.value.clone())
         } else {
             None

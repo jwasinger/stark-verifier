@@ -23,15 +23,15 @@ pub struct StarkProof {
     pub merkle_root: MerkleDigest,
     pub l_merkle_root: MerkleDigest,
     pub fri_proof: FRIProof,
-    pub merkle_branches: Vec<u8>, // TODO
-    pub linear_comb_branches: Vec<u8>, // TODO
+    pub merkle_branches: MultiProof,
+    pub linear_comb_branches: MultiProof,
 }
 
 #[derive(Default)]
 pub struct LDPMerkleProof {
     pub root2: [u8; 32],
-    pub column_branches: MultiProof, // TODO
-    pub poly_branches: MultiProof  // TODO
+    pub column_branches: MultiProof,
+    pub poly_branches: MultiProof
 }
 
 impl StarkProof {
@@ -112,22 +112,11 @@ impl StarkProof {
             points_proof: points_proof,
         };
 
-        // merkle_root.clone_from_slice(&data[0..PREAMBLE_SIZE-32]);
-        // l_merkle_root.clone_from_slice(&data[(PREAMBLE_SIZE-32)..PREAMBLE_SIZE]);
-
-        // let (merkle_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..data.len()]).expect("merkle branches malformed");
-        // let (linear_comb_branches, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE+next_offset..data.len()]).expect("linear combination malformed");
-
-        /*
-        let (fri_proof, next_offset) = Witnesses::deserialize_multi(&data[PREAMBLE_SIZE..]).expect("linear combination malformed");
-        */
-
-
         let mut proof = Self {
             merkle_root, 
             l_merkle_root,
-            merkle_branches: Vec::new(), //TODO ignoring merkle_branches and linear_comb_branches for now
-            linear_comb_branches: Vec::new(),
+            merkle_branches: MultiProof::deserialize(&mut file),
+            linear_comb_branches: MultiProof::deserialize(&mut file),
             fri_proof: fri_proof,
         };
 

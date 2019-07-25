@@ -1,9 +1,3 @@
-  /*
-Proof:
-    merkle roots of P, D, spot check merkle proofs, low-degree proofs of P and D
-*/
-
-
 pub mod utils;
 pub mod proof;
 pub mod merkle_tree;
@@ -20,15 +14,18 @@ use std::str::FromStr;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::time::{Duration, Instant};
 
-use blake2::{Blake2b, Digest};
+use blake2::{Blake2b, Blake2s, Digest};
 use std::mem::transmute;
 use self::proof::{StarkProof, LDPMerkleProof, LDPPointsProof};
 use merkle_tree::MultiProof;
 
 use crate::proof::FRIProof;
-use crate::utils::{is_power_of_2, get_pseudorandom_indices, mimc, as_u32_le, multi_interp_4, eval_quartic};
+use crate::utils::{is_power_of_2, get_pseudorandom_indices, mimc, as_u32_le, multi_interp_4, eval_quartic, divmod, eval_poly_at, lagrange_interp_2, mul_polys, negative_to_positive};
 use crate::fft::fft_inv;
+use rustfft::num_traits::sign::Signed;
+use rustfft::num_traits::identities::{One, Zero};
 
 const EXTENSION_FACTOR: usize = 8;
 const MODULUS: &str = "115792089237316195423570985008687907853269984665640564039457584006405596119041";
@@ -74,18 +71,6 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, pr
 
         let poly_values = m_proof.poly_branches.verify(&poly_positions, Some(root.clone())).unwrap();
 
-        /*
-        For each y coordinate, get the x coordinates on the row, the values on the row, and the value at that y from the column
-        */
-
-        /*
-        println!("poly values {} are", poly_values.len());
-
-        for val in &poly_values {
-            println!("{}", hex::encode(&val));
-        }
-        */
-
         let mut xcoords: Vec<BigInt> = Vec::new();
         let mut rows: Vec<BigInt> = Vec::new();
 
@@ -93,20 +78,10 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, pr
             let x1 = root_of_unity.modpow(&BigInt::from(*y), &modulus);
 
             for j in 0..4 {
-                //println!("x1 is {}", &x1);
-                //println!("quartic root of unity is {}", &quartic_roots_of_unity[j]);
-
                 xcoords.push(((&quartic_roots_of_unity[j]) * &x1) % modulus);
                 rows.push(BigInt::from_bytes_be(Sign::Plus, &poly_values[i*4 + j]));
             }
         }
-
-        /*
-        Verify for each selected y coordinate that the four points from the polynomial and the one point from the column that are on that y coordinate are on the same deg < 4 polynomial
-        */
-
-        // println!("len xcoords / 4 is {}", xcoords.len() / 4);
-        // println!("len rows / 4 is {}", rows.len() / 4);
 
         let polys: Vec<BigInt> = multi_interp_4(&xcoords, &rows, modulus);
 
@@ -119,8 +94,6 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, pr
         rou_deg = rou_deg / 4;
         root = &m_proof.root2;
     }
-
-    // verify the polynomial
 
     true
 }
@@ -152,16 +125,75 @@ fn verify_mimc_proof(inp: BigInt, num_steps: usize, round_constants: &Vec<BigInt
     assert!(val == FromStr::from_str("56670364103764250102176604807203318908867195832872336813161821519223575486477").unwrap(), "constants mini polynomial root wasn't correct");
 
     let constants_mini_polynomial = fft_inv(round_constants, &val, &modulus);
-    assert!(constants_mini_polynomial[constants_mini_polynomial.len()-1] == FromStr::from_str("114438966298574221400558587944897110775439695130591918280658208104532468844382").unwrap(), "polynomial last element wasn't correct");
-    
-    println!("verifying low degree proof...");
+
     if !verify_low_degree_proof(&proof.l_merkle_root, G2.clone(), &proof.fri_proof, BigInt::from(num_steps * 2), &modulus, Some(EXTENSION_FACTOR as u32)) {
         return false;
     }
 
-    println!("low degree proof verified...\nperforming spot checks");
+    let mut hasher = Blake2s::default();
 
-    // TODO perform spot checks
+    hasher.input(&[&proof.merkle_root[..], &[1u8]].concat());
+    let k1 = BigInt::from_bytes_be(Sign::Plus, &hasher.result());
+
+    hasher = Blake2s::default();
+    hasher.input(&[&proof.merkle_root[..], &[2u8]].concat());
+    let k2 = BigInt::from_bytes_be(Sign::Plus, &hasher.result());
+
+    hasher = Blake2s::default();
+    hasher.input(&[&proof.merkle_root[..], &[3u8]].concat());
+    let k3 = BigInt::from_bytes_be(Sign::Plus, &hasher.result());
+
+    hasher = Blake2s::default();
+    hasher.input(&[&proof.merkle_root[..], &[4u8]].concat());
+    let k4 = BigInt::from_bytes_be(Sign::Plus, &hasher.result());
+
+    let samples: u32 = 80; // spot check security factor
+    let positions = get_pseudorandom_indices(&proof.l_merkle_root, samples as usize, precision as u32, Some(EXTENSION_FACTOR as u32));
+
+    let mut augmented_positions: Vec<u32> = Vec::new();
+
+    for p in &positions {
+        augmented_positions.push(*p);
+        augmented_positions.push((*p + skips as u32) % precision as u32);
+    }
+
+    let values = proof.merkle_branches.verify(&augmented_positions, Some(proof.merkle_root.clone())).unwrap();
+    let linear_comb_values = proof.linear_comb_branches.verify(&positions, Some(proof.l_merkle_root.clone())).unwrap();
+
+    let last_step_position = G2.modpow(&BigInt::from((num_steps - 1) * skips), modulus);
+
+    for (i, p) in positions.iter().enumerate() {
+        let x = G2.modpow(&BigInt::from(*p), modulus);
+        let n_steps = BigInt::from(num_steps);
+        let x_to_the_steps = x.modpow(&n_steps, modulus);
+        let m_branch_1 = &values[i*2];
+        let m_branch_2 = &values[i*2 + 1];
+        let l_of_x = BigInt::from_bytes_be(Sign::Plus, &linear_comb_values[i]);
+
+        let p_of_x = BigInt::from_bytes_be(Sign::Plus, &m_branch_1[0..32]);
+        let p_of_g1x = BigInt::from_bytes_be(Sign::Plus, &m_branch_2[0..32]);
+        let d_of_x = BigInt::from_bytes_be(Sign::Plus, &m_branch_1[32..64]);
+        let b_of_x = BigInt::from_bytes_be(Sign::Plus, &m_branch_1[64..96]);
+
+        let z_value = divmod(&(&x.modpow(&n_steps, &modulus) - BigInt::one()), &(&x - &last_step_position), &modulus);
+
+        let k_of_x = eval_poly_at(&constants_mini_polynomial, &x.modpow(&BigInt::from(skips2), modulus), modulus);
+
+        // Check transition constraints C(P(x)) = Z(x) * D(x)
+        assert!((&p_of_g1x - &p_of_x.pow(3u32) - &k_of_x - &z_value * &d_of_x) % modulus == BigInt::zero(), "invalid proof: transition constraints check failed");
+
+        //Check boundary constraints B(x) * Q(x) + I(x) = P(x)
+        let interpolant = lagrange_interp_2(&[BigInt::one(), last_step_position.clone()], &[inp.clone(), output.clone()], modulus);	
+        let zeropoly2 = mul_polys(&vec![-BigInt::one(), BigInt::one()], &vec![-last_step_position.clone(), BigInt::one()], modulus);
+
+        assert!(negative_to_positive(&(&p_of_x - &b_of_x * eval_poly_at(&zeropoly2, &x, modulus) - eval_poly_at(&interpolant.to_vec(), &x, modulus)), modulus) == BigInt::zero(), "invalid proof: boundary constraints B(x) * Q(x) + I(x) = P(x) check failed");
+        
+        // Check correctness of the linear combination
+        assert!(negative_to_positive(&(&l_of_x - &d_of_x - &k1 * &p_of_x - &k2 * &p_of_x * &x_to_the_steps - 
+            &k3 * &b_of_x - &k4 * &b_of_x * &x_to_the_steps), modulus) == BigInt::zero(), "invalid linear combination");
+    }
+
+    println!("proof verified");
 
     return true;
 }
@@ -179,7 +211,17 @@ fn main() {
         constants.push(constant);
     }
 
-    if !verify_mimc_proof(BigInt::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants, mimc(&BigInt::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants, &modulus), proof, &modulus) {
+    let mimc_time = Instant::now();
+    let output = mimc(&BigInt::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants, &modulus);
+
+    println!("took {:?} to compute {} rounds of mimc", mimc_time.elapsed(), 2usize.pow(LOG_STEPS as u32));
+    println!("output is {}", &output);
+    
+    let stark_time = Instant::now();
+    // TODO start measuring for benchmarks here
+    if !verify_mimc_proof(BigInt::from(3u8), 2usize.pow(LOG_STEPS as u32), &constants, output, proof, &modulus) {
         panic!("could not verify mimc stark proof");
     }
+
+    println!("took {:?} to verify stark proof", stark_time.elapsed());
 }
