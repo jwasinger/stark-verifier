@@ -2,6 +2,7 @@ pub mod utils;
 pub mod proof;
 pub mod merkle_tree;
 pub mod fft;
+pub mod deserializer;
 
 #[macro_use]
 extern crate lazy_static;
@@ -53,14 +54,12 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, pr
     assert!(&quartic_roots_of_unity[3] == &FromStr::from_str("80127877722526290441229381276271393407378829608771736609433200039324583025757").unwrap(), "bad quartic roots of unity..");
 
     for m_proof in &proof.merkle_proofs {
-        //let (root2, column_branches, poly_branches) = p;
         let special_x = BigInt::from_bytes_be(Sign::Plus, root);
 
         let ys = get_pseudorandom_indices(&m_proof.root2, 40, (rou_deg / 4) as u32, excludeMultiplesOf);
 
         let column_values = m_proof.column_branches.verify(&ys, None).unwrap();
 
-        // let poly_positions = sum([[y + (roudeg // 4) * j for j in range(4)] for y in &ys], []);
         let mut poly_positions: Vec<u32> = Vec::new();
 
         for y in &ys {
@@ -94,6 +93,8 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, pr
         rou_deg = rou_deg / 4;
         root = &m_proof.root2;
     }
+
+    // TODO direct verification of the low degree proof components
 
     true
 }
@@ -200,8 +201,10 @@ fn verify_mimc_proof(inp: BigInt, num_steps: usize, round_constants: &Vec<BigInt
 
 fn main() {
     let mut file = File::open("proof.bin").unwrap();
+    let mut file_bytes: Vec<u8> = Vec::new();
+    file.read_to_end(&mut file_bytes);
 
-    let proof = StarkProof::deserialize(file).expect("couldn't deserialize"); 
+    let (proof, _) = deserializer::from_bytes(&file_bytes).expect("couldn't deserialize"); 
     const LOG_STEPS: usize = 13;
     let mut constants: Vec<BigInt> = Vec::new();
     let modulus: BigInt = BigInt::from_str(MODULUS).expect("modulus couldn't be deserialized into bigint");
