@@ -96,7 +96,7 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, pr
     true
 }
 
-fn verify_mimc_proof(inp: BigInt, num_steps: usize, round_constants: &Vec<BigInt>, output: BigInt, proof: StarkProof, modulus: &BigInt) -> bool {
+pub fn verify_mimc_proof(inp: BigInt, num_steps: usize, round_constants: &Vec<BigInt>, output: BigInt, proof: StarkProof, modulus: &BigInt) -> bool {
 
     if num_steps > (2usize.pow(32) / EXTENSION_FACTOR) { //TODO use of floor here?
         return false;
@@ -196,6 +196,7 @@ fn verify_mimc_proof(inp: BigInt, num_steps: usize, round_constants: &Vec<BigInt
     return true;
 }
 
+/*
 fn main() {
     let mut file = File::open("proof.bin").unwrap();
     let mut file_bytes: Vec<u8> = Vec::new();
@@ -225,3 +226,4 @@ fn main() {
 
     println!("took {:?} to verify stark proof", stark_time.elapsed());
 }
+*/
