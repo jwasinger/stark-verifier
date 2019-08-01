@@ -11,5 +11,12 @@ num-bigint = { git = "https://github.com/jwasinger/num-bigint", branch = "featur
 blake2 = "0.8.0"
 hex = "0.3.1"
 
+
+[dependencies.ewasm_api]
+git = "https://github.com/ewasm/ewasm-rust-api"
+rev = "1c01982"
+default-features = false
+features = ["std", "eth2", "qimalloc"]
+
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]

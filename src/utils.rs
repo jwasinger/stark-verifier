@@ -93,6 +93,15 @@ pub fn get_pseudorandom_indices(seed: &[u8; 32], count: usize, modulus: u32, exc
     output 
 }
 
+pub fn to_u8_array_le(num: u32) -> [u8; 4] {
+    [
+      (num >> 0) as u8,
+      (num >> 8) as u8,
+      (num >> 16) as u8,
+      (num >> 24) as u8
+    ]
+}
+
 pub fn as_u32_le(array: &[u8; 4]) -> u32 {
     ((array[0] as u32) <<  0) +
     ((array[1] as u32) <<  8) +

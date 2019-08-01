@@ -1,3 +1,5 @@
+extern crate ewasm_api;
+
 pub mod utils;
 pub mod proof;
 pub mod merkle_tree;
@@ -18,15 +20,16 @@ use blake2::{Blake2b, Blake2s, Digest};
 use std::mem::transmute;
 use self::proof::{StarkProof, LDPMerkleProof, LDPPointsProof};
 use merkle_tree::MultiProof;
+use ewasm_api::types::*;
 
 use crate::proof::FRIProof;
-use crate::utils::{is_power_of_2, get_pseudorandom_indices, mimc, as_u32_le, multi_interp_4, eval_quartic, divmod, eval_poly_at, lagrange_interp_2, mul_polys, negative_to_positive};
+use crate::utils::{is_power_of_2, get_pseudorandom_indices, mimc, as_u32_le, to_u8_array_le, multi_interp_4, eval_quartic, divmod, eval_poly_at, lagrange_interp_2, mul_polys, negative_to_positive};
 use crate::fft::fft_inv;
 use rustfft::num_traits::sign::Signed;
 use rustfft::num_traits::identities::{One, Zero};
 
-const EXTENSION_FACTOR: usize = 8;
-const MODULUS: &str = "115792089237316195423570985008687907853269984665640564039457584006405596119041";
+pub const EXTENSION_FACTOR: usize = 8;
+pub const MODULUS: &str = "115792089237316195423570985008687907853269984665640564039457584006405596119041";
 
 fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, proof: &FRIProof,  mut max_deg_plus_1: BigInt, modulus: &BigInt, excludeMultiplesOf: Option<u32>) -> bool {
     let mut test_val = root_of_unity.clone(); 
@@ -98,7 +101,7 @@ fn verify_low_degree_proof(merkle_root: &[u8; 32], mut root_of_unity: BigInt, pr
 
 pub fn verify_mimc_proof(inp: BigInt, num_steps: usize, round_constants: &Vec<BigInt>, output: BigInt, proof: StarkProof, modulus: &BigInt) -> bool {
 
-    if num_steps > (2usize.pow(32) / EXTENSION_FACTOR) { //TODO use of floor here?
+    if num_steps as u64 > (2u64.pow(32) / EXTENSION_FACTOR as u64) { //TODO use of floor here?
         return false;
     }
 
@@ -190,8 +193,6 @@ pub fn verify_mimc_proof(inp: BigInt, num_steps: usize, round_constants: &Vec<Bi
         assert!(negative_to_positive(&(&l_of_x - &d_of_x - &k1 * &p_of_x - &k2 * &p_of_x * &x_to_the_steps - 
             &k3 * &b_of_x - &k4 * &b_of_x * &x_to_the_steps), modulus) == BigInt::zero(), "invalid linear combination");
     }
-
-    println!("proof verified");
 
     return true;
 }
